@@ -1247,6 +1247,57 @@ struct wl1271_acx_fm_coex {
 } __packed;
 
 enum {
+	FILTER_DROP = 0,
+	FILTER_SIGNAL = 1,
+	FILTER_FW_HANDLE = 2,
+};
+
+struct acx_rx_data_filter_state {
+	struct acx_header header;
+
+	u8 enable;
+
+	/* action of type FILTER_XXX */
+	u8 default_action;
+	u8 pad[2];
+} __packed;
+
+#define WL1271_MAX_RX_DATA_FILTERS 4
+#define WL1271_MAX_RX_DATA_FILTER_SIZE 98
+#define WL1271_RX_DATA_FILTER_MAX_FIELD_PATTERNS 8
+#define WL1271_RX_DATA_FILTER_MAX_PATTERN_SIZE 64
+#define WL1271_RX_DATA_FILTER_ETH_HEADER_SIZE 14
+
+#define WL1271_RX_DATA_FILTER_FLAG_IP_HEADER           0
+#define WL1271_RX_DATA_FILTER_FLAG_ETHERNET_HEADER     2
+
+
+
+struct acx_rx_data_filter_cfg {
+	u8 add_filter;
+
+	/* range 0 - MAX_DATA_FILTERS */
+	u8 index;
+
+	/* action of type FILTER_XXX */
+	u8 action;
+
+	/* number of fields in this filter */
+	u8 num_fields;
+
+	/*
+	 * currently we only support a single filtering field in the driver, so
+	 * spell it out directly here
+	 */
+
+	/* The offset is taken from the start of the first MAC addr */
+	__le16 offset;
+	u8 length;
+	u8 flag;
+	u8 pattern[WL1271_RX_DATA_FILTER_MAX_PATTERN_SIZE];
+} __packed;
+
+enum {
 	ACX_WAKE_UP_CONDITIONS      = 0x0002,
 	ACX_MEM_CFG                 = 0x0003,
 	ACX_SLOT                    = 0x0004,
@@ -1389,5 +1440,10 @@ int wl1271_acx_config_ps(struct wl1271 *wl);
 int wl1271_acx_set_inconnection_sta(struct wl1271 *wl, u8 *addr);
 int wl1271_acx_set_ap_beacon_filter(struct wl1271 *wl, bool enable);
 int wl1271_acx_fm_coex(struct wl1271 *wl);
+int wl1271_acx_toggle_rx_data_filter(struct wl1271 *wl, bool enable,
+				     u8 default_action);
+int wl1271_acx_set_rx_data_filter(struct wl1271 *wl, bool add, u8 index,
+				  u8 action, u8 *pattern, u8 length, u8 offset);
+
 
 #endif /* __WL1271_ACX_H__ */

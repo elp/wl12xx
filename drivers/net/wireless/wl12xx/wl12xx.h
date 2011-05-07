@@ -583,6 +583,9 @@ struct wl1271 {
 
 	/* Platform limitations */
 	unsigned int platform_quirks;
+
+	/* is broadcast filtering enabled? */
+	bool broadcast_filtered;
 };
 
 struct wl1271_station {

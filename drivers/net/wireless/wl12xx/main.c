@@ -1563,6 +1563,7 @@ static void __wl1271_op_remove_interface(struct wl1271 *wl,
 	memset(wl->ap_hlid_map, 0, sizeof(wl->ap_hlid_map));
 	wl->ap_fw_ps_map = 0;
 	wl->ap_ps_map = 0;
+	wl->broadcast_filtered = false;
 
 	/*
 	 * this is performed after the cancel_work calls and the associated
@@ -3747,6 +3748,7 @@ struct ieee80211_hw *wl1271_alloc_hw(void)
 	wl->ap_fw_ps_map = 0;
 	wl->quirks = 0;
 	wl->platform_quirks = 0;
+	wl->broadcast_filtered = false;
 
 	memset(wl->tx_frames_map, 0, sizeof(wl->tx_frames_map));
 	for (i = 0; i < ACX_TX_DESCRIPTORS; i++)

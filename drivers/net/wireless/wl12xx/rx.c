@@ -242,3 +242,44 @@ void wl1271_set_default_filters(struct wl1271 *wl)
 		wl->rx_filter = WL1271_DEFAULT_STA_RX_FILTER;
 	}
 }
+
+/* must be called with wl->mutex taken and the chip awake */
+int wl1271_set_broadcast_filter(struct wl1271 *wl, bool enable)
+{
+	static u8 bcast_addr[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+	int ret;
+
+	if ((enable && wl->broadcast_filtered) ||
+	    (!enable && !wl->broadcast_filtered))
+		return 0;
+
+	if (enable) {
+		ret = wl1271_acx_toggle_rx_data_filter(wl, true,
+						       FILTER_SIGNAL);
+		if (ret < 0)
+			goto out;
+
+		ret = wl1271_acx_set_rx_data_filter(wl, true, 0, FILTER_DROP,
+						    bcast_addr,
+						    sizeof(bcast_addr), 0);
+		if (ret < 0)
+			goto out;
+
+		wl->broadcast_filtered = true;
+	} else {
+		ret = wl1271_acx_set_rx_data_filter(wl, false, 0, FILTER_DROP,
+						    bcast_addr,
+						    sizeof(bcast_addr), 0);
+		if (ret < 0)
+			goto out;
+
+		wl->broadcast_filtered = false;
+
+		ret = wl1271_acx_toggle_rx_data_filter(wl, false,
+						       FILTER_SIGNAL);
+		if (ret < 0)
+			goto out;
+	}
+out:
+	return ret;
+}
