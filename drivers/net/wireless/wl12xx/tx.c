@@ -196,10 +196,18 @@ u8 wl12xx_tx_get_hlid(struct wl1271 *wl, struct wl12xx_vif *wlvif,
 	if ((test_bit(WLVIF_FLAG_STA_ASSOCIATED, &wlvif->flags) ||
 	     test_bit(WLVIF_FLAG_IBSS_JOINED, &wlvif->flags)) &&
 	    !ieee80211_is_auth(hdr->frame_control) &&
-	    !ieee80211_is_assoc_req(hdr->frame_control))
+	    !ieee80211_is_assoc_req(hdr->frame_control)) {
+		struct ieee80211_vif *vif = wl12xx_wlvif_to_vif(wlvif);
+		if (compare_ether_addr(hdr->addr1, vif->bss_conf.bssid)) {
+			wl1271_debug(DEBUG_TX, "sending TDLS frame to %pM",
+				     hdr->addr1);
+			return wlvif->dev_hlid;
+		}
+
 		return wlvif->sta.hlid;
-	else
+	} else {
 		return wlvif->dev_hlid;
+	}
 }
 
 static unsigned int wl12xx_calc_packet_alignment(struct wl1271 *wl,
