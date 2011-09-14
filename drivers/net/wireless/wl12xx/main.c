@@ -3854,6 +3854,8 @@ sta_not_found:
 			wl1271_check_operstate(wl, wlvif,
 					       ieee80211_get_operstate(vif));
 		}
+
+#if 0 /* TDLS */
 		/*
 		 * stop device role if started (we might already be in
 		 * STA role). TODO: make it better.
@@ -3867,6 +3869,7 @@ sta_not_found:
 			if (ret < 0)
 				goto out;
 		}
+#endif
 
 		/* If we want to go in PSM but we're not there yet */
 		if (test_bit(WLVIF_FLAG_PSM_REQUESTED, &wlvif->flags) &&
