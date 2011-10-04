@@ -1358,6 +1358,28 @@ TRACE_EVENT(api_cqm_rssi_notify,
 	)
 );
 
+TRACE_EVENT(api_req_channel_switch,
+	TP_PROTO(struct ieee80211_sub_if_data *sdata,
+		 u16 center_freq),
+
+	TP_ARGS(sdata, center_freq),
+
+	TP_STRUCT__entry(
+		VIF_ENTRY
+		__field(u16, center_freq)
+	),
+
+	TP_fast_assign(
+		VIF_ASSIGN;
+		__entry->center_freq = center_freq;
+	),
+
+	TP_printk(
+		VIF_PR_FMT " request to switch to freq %d",
+		VIF_PR_ARG, __entry->center_freq
+	)
+)
+
 TRACE_EVENT(api_scan_completed,
 	TP_PROTO(struct ieee80211_local *local, bool aborted),
 

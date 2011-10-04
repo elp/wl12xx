@@ -3457,6 +3457,16 @@ void ieee80211_cqm_rssi_notify(struct ieee80211_vif *vif,
 			       gfp_t gfp);
 
 /**
+ * ieee80211_req_channel_switch - req a channel switch from usermode.
+ *
+ * @vif: &struct ieee80211_vif pointer from the add_interface callback.
+ * @chan: the desired channel.
+ * @gfp: context flags.
+ */
+void ieee80211_req_channel_switch(struct ieee80211_vif *vif,
+				  struct ieee80211_channel *chan, gfp_t gfp);
+
+/**
  * ieee80211_get_operstate - get the operstate of the vif
  *
  * @vif: &struct ieee80211_vif pointer from the add_interface callback.

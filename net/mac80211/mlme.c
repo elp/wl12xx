@@ -2939,3 +2939,14 @@ unsigned char ieee80211_get_operstate(struct ieee80211_vif *vif)
 	return sdata->dev->operstate;
 }
 EXPORT_SYMBOL(ieee80211_get_operstate);
+
+void ieee80211_req_channel_switch(struct ieee80211_vif *vif,
+				  struct ieee80211_channel *chan, gfp_t gfp)
+{
+	struct ieee80211_sub_if_data *sdata = vif_to_sdata(vif);
+
+	trace_api_req_channel_switch(sdata, chan->center_freq);
+
+	cfg80211_req_channel_switch(sdata->dev, chan, gfp);
+}
+EXPORT_SYMBOL(ieee80211_req_channel_switch);
