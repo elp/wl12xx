@@ -2950,3 +2950,45 @@ void ieee80211_req_channel_switch(struct ieee80211_vif *vif,
 	cfg80211_req_channel_switch(sdata->dev, chan, gfp);
 }
 EXPORT_SYMBOL(ieee80211_req_channel_switch);
+
+void ieee80211_ap_ch_switch_done_work(struct work_struct *work)
+{
+	struct ieee80211_sub_if_data *sdata =
+		container_of(work, struct ieee80211_sub_if_data,
+			     u.ap.ap_ch_sw_work);
+	struct ieee80211_local *local = sdata->local;
+
+	/* update the device channel directly */
+	mutex_lock(&local->mtx);
+	if (local->ap_cs_channel) {
+		local->oper_channel =
+			local->hw.conf.channel = local->ap_cs_channel;
+		local->_oper_channel_type =  local->ap_cs_type;
+		local->ap_cs_channel = NULL;
+	}
+
+	ieee80211_wake_queues_by_reason(&local->hw,
+					IEEE80211_QUEUE_STOP_REASON_CH_SW);
+	mutex_unlock(&local->mtx);
+
+	cfg80211_ch_switch_notify(sdata->dev, local->oper_channel->center_freq,
+				  local->_oper_channel_type);
+}
+
+void ieee80211_ap_ch_switch_done(struct ieee80211_vif *vif,
+				 struct ieee80211_channel *new_channel,
+				 enum nl80211_channel_type type)
+{
+	struct ieee80211_sub_if_data *sdata = vif_to_sdata(vif);
+	struct ieee80211_local *local = sdata->local;
+
+	if (WARN_ON(sdata->vif.type != NL80211_IFTYPE_AP))
+		return;
+
+	if (WARN_ON(local->ap_cs_channel != new_channel))
+		return;
+
+	trace_api_ap_ch_switch_done(sdata, new_channel->center_freq);
+	schedule_work(&sdata->u.ap.ap_ch_sw_work);
+}
+EXPORT_SYMBOL(ieee80211_ap_ch_switch_done);

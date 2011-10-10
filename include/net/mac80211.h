@@ -2241,6 +2241,8 @@ struct ieee80211_ops {
 	void (*flush)(struct ieee80211_hw *hw, bool drop);
 	void (*channel_switch)(struct ieee80211_hw *hw,
 			       struct ieee80211_channel_switch *ch_switch);
+	void (*ap_channel_switch)(struct ieee80211_hw *hw,
+				  struct ieee80211_ap_ch_switch *ap_ch_switch);
 	int (*napi_poll)(struct ieee80211_hw *hw, int budget);
 	int (*set_antenna)(struct ieee80211_hw *hw, u32 tx_ant, u32 rx_ant);
 	int (*get_antenna)(struct ieee80211_hw *hw, u32 *tx_ant, u32 *rx_ant);
@@ -3465,6 +3467,25 @@ void ieee80211_cqm_rssi_notify(struct ieee80211_vif *vif,
  */
 void ieee80211_req_channel_switch(struct ieee80211_vif *vif,
 				  struct ieee80211_channel *chan, gfp_t gfp);
+
+/**
+ * ieee80211_ap_ch_switch_done_work - ap channel switch complete work.
+ *
+ * @work: the channel switch complete work
+ */
+void ieee80211_ap_ch_switch_done_work(struct work_struct *work);
+
+/**
+ * ieee80211_ap_ch_switch_done - inform and update a configured connection
+ * that channel switch is complete.
+ *
+ * @vif: &struct ieee80211_vif pointer from the add_interface callback.
+ * @new_channel: the new channel.
+ * @type: new channe ltype.
+ */
+void ieee80211_ap_ch_switch_done(struct ieee80211_vif *vif,
+				 struct ieee80211_channel *new_channel,
+				 enum nl80211_channel_type type);
 
 /**
  * ieee80211_get_operstate - get the operstate of the vif
