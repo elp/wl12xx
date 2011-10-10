@@ -91,7 +91,9 @@ int wl12xx_cmd_start_fwlog(struct wl1271 *wl);
 int wl12xx_cmd_stop_fwlog(struct wl1271 *wl);
 int wl12xx_cmd_channel_switch(struct wl1271 *wl,
 			      struct wl12xx_vif *wlvif,
-			      struct ieee80211_channel_switch *ch_switch);
+			      struct ieee80211_channel *channel,
+			      u8 count, bool block_tx,
+			      bool post_switch_block_tx);
 int wl12xx_cmd_stop_channel_switch(struct wl1271 *wl);
 int wl12xx_cmd_generic_cfg(struct wl1271 *wl, struct wl12xx_vif *wlvif,
 			   u8 index, bool enable, u8 value);

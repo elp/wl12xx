@@ -1889,10 +1889,13 @@ out:
 
 int wl12xx_cmd_channel_switch(struct wl1271 *wl,
 			      struct wl12xx_vif *wlvif,
-			      struct ieee80211_channel_switch *ch_switch)
+			      struct ieee80211_channel *channel,
+			      u8 count, bool block_tx,
+			      bool post_switch_block_tx)
 {
 	struct wl12xx_cmd_channel_switch *cmd;
 	int ret;
+	bool is_ap = (wlvif->bss_type == BSS_TYPE_AP_BSS);
 
 	wl1271_debug(DEBUG_ACX, "cmd channel switch");
 
@@ -1902,13 +1905,21 @@ int wl12xx_cmd_channel_switch(struct wl1271 *wl,
 		goto out;
 	}
 
-	cmd->role_id = wlvif->role_id;
-	cmd->channel = ch_switch->channel->hw_value;
-	cmd->switch_time = ch_switch->count;
-	cmd->stop_tx = ch_switch->block_tx;
+	if (channel->flags & IEEE80211_CHAN_RADAR) {
+		wl1271_error("can't switch to radar channel,"
+			     "dfs not supported");
+		ret = -EINVAL;
+		goto out;
+	}
 
-	/* FIXME: control from mac80211 in the future */
-	cmd->post_switch_tx_disable = 0;  /* Enable TX on the target channel */
+	cmd->role_id = wlvif->role_id;
+	cmd->channel = channel->hw_value;
+	cmd->switch_time = count;
+	cmd->stop_tx = block_tx;
+	cmd->post_switch_tx_disable = post_switch_block_tx;
+
+	if (is_ap)
+		wl->ch_sw_freq = channel->center_freq;
 
 	ret = wl1271_cmd_send(wl, CMD_CHANNEL_SWITCH, cmd, sizeof(*cmd), 0);
 	if (ret < 0) {

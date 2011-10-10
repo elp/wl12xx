@@ -575,6 +575,9 @@ struct wl1271 {
 	/* RX Data filter rule status - enabled/disabled */
 	bool rx_data_filters_status[WL1271_MAX_RX_FILTERS];
 
+	/* AP-mode - the frequency driver switching to in AP/GO */
+	u16 ch_sw_freq;
+
 	bool watchdog_recovery;
 
 	/* work to fire when Tx is stuck */

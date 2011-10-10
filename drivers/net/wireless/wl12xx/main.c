@@ -5512,7 +5512,7 @@ out:
 }
 
 static void wl12xx_op_channel_switch(struct ieee80211_hw *hw,
-				     struct ieee80211_channel_switch *ch_switch)
+				     struct ieee80211_channel_switch *ch_sw)
 {
 	struct wl1271 *wl = hw->priv;
 	struct wl12xx_vif *wlvif;
@@ -5540,8 +5540,44 @@ static void wl12xx_op_channel_switch(struct ieee80211_hw *hw,
 
 	/* TODO: change mac80211 to pass vif as param */
 	wl12xx_for_each_wlvif_sta(wl, wlvif) {
-		ret = wl12xx_cmd_channel_switch(wl, wlvif, ch_switch);
+		ret = wl12xx_cmd_channel_switch(wl, wlvif,
+						ch_sw->channel, ch_sw->count,
+						ch_sw->block_tx, false);
+		if (!ret)
+			set_bit(WLVIF_FLAG_CS_PROGRESS, &wlvif->flags);
+	}
 
+	wl1271_ps_elp_sleep(wl);
+
+out:
+	mutex_unlock(&wl->mutex);
+}
+
+static void wl12xx_op_ap_channel_switch(struct ieee80211_hw *hw,
+					struct ieee80211_ap_ch_switch *ap_ch_sw)
+{
+	struct wl1271 *wl = hw->priv;
+	struct wl12xx_vif *wlvif;
+	int ret;
+
+	wl1271_debug(DEBUG_MAC80211, "mac80211 ap channel switch");
+
+	wl1271_tx_flush(wl);
+
+	mutex_lock(&wl->mutex);
+
+	ret = wl1271_ps_elp_wakeup(wl);
+	if (ret < 0)
+		goto out;
+
+	wl12xx_for_each_wlvif_ap(wl, wlvif) {
+		wl1271_debug(DEBUG_MAC80211, "mac80211 sending "
+			     "channel switch cmd");
+		ret = wl12xx_cmd_channel_switch(wl, wlvif,
+					    ap_ch_sw->channel,
+					    ap_ch_sw->count,
+					    ap_ch_sw->block_tx,
+					    ap_ch_sw->post_switch_block_tx);
 		if (!ret)
 			set_bit(WLVIF_FLAG_CS_PROGRESS, &wlvif->flags);
 	}
@@ -5829,6 +5865,7 @@ static const struct ieee80211_ops wl1271_ops = {
 	.tx_frames_pending = wl1271_tx_frames_pending,
 	.set_bitrate_mask = wl12xx_set_bitrate_mask,
 	.channel_switch = wl12xx_op_channel_switch,
+	.ap_channel_switch = wl12xx_op_ap_channel_switch,
 	.set_default_key_idx = wl1271_op_set_default_key_idx,
 	.get_current_rssi = wl1271_op_get_current_rssi,
 	.set_rx_filters = wl12xx_op_set_rx_filters,
