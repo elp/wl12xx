@@ -565,6 +565,14 @@
  *	%NL80211_ATTR_IFINDEX is now on %NL80211_ATTR_WIPHY_FREQ with
  *	%NL80211_ATTR_WIPHY_CHANNEL_TYPE.
  *
+* @NL80211_CMD_AP_CH_SWITCH: Perform a channel switch in the driver (for
+ *	AP/GO).
+ *	%NL80211_ATTR_WIPHY_FREQ: new channel frequency.
+ *	%NL80211_ATTR_CH_SWITCH_BLOCK_TX: block tx on the current channel.
+ *	%NL80211_ATTR_CH_SWITCH_POST_BLOCK_TX: block tx on the target channel.
+ *	%NL80211_FREQ_ATTR_CH_SWITCH_COUNT: number of TBTT's until the channel
+ *	switch event.
+ *
  * @NL80211_CMD_SCAN_CANCEL: Stop currently running scan (both sw and hw).
  *	This operation will eventually invoke %NL80211_CMD_SCAN_ABORTED
  *	event, partial scan results will be available. Returns -ENOENT
@@ -727,6 +735,8 @@ enum nl80211_commands {
 	NL80211_CMD_SET_NOACK_MAP,
 
 	NL80211_CMD_CH_SWITCH_NOTIFY,
+
+	NL80211_CMD_AP_CH_SWITCH,
 
 	/* leave some room for adding nl80211 commands for old kernels */
 	NL80211_CMD_SCAN_CANCEL = NL80211_CMD_CH_SWITCH_NOTIFY + 10,
@@ -1315,6 +1325,14 @@ enum nl80211_commands {
  * @NL80211_ATTR_ROAMING_DISABLED: indicates that the driver can't do roaming
  *      currently.
  *
+ * @NL80211_ATTR_CH_SWITCH_COUNT: the number of TBTT's until the channel
+ *	switch event
+ * @NL80211_ATTR_CH_SWITCH_BLOCK_TX: block tx on the current channel before the
+ *	channel switch operation.
+ * @NL80211_ATTR_CH_SWITCH_POST_BLOCK_TX: block tx on the target channel after
+ *	the channel switch operation, should be set if the target channel is
+ *	DFS channel.
+ *
  * @NL80211_ATTR_MAX: highest attribute number currently defined
  * @__NL80211_ATTR_AFTER_LAST: internal use
  */
@@ -1582,6 +1600,9 @@ enum nl80211_attrs {
 	NL80211_ATTR_SCHED_SCAN_NUM_SHORT_INTERVALS,
 
 	NL80211_ATTR_ROAMING_DISABLED,
+	NL80211_ATTR_CH_SWITCH_COUNT,
+	NL80211_ATTR_CH_SWITCH_BLOCK_TX,
+	NL80211_ATTR_CH_SWITCH_POST_BLOCK_TX,
 
 	/* add attributes here, update the policy in nl80211.c */
 
@@ -3100,12 +3121,14 @@ enum nl80211_ap_sme_features {
  * @NL80211_FEATURE_SCHED_SCAN_INTERVALS: This driver supports using
  *	short interval for sched scan and then switching to a longer
  *	interval.
+ * @NL80211_FEATURE_AP_CH_SWITCH: This driver supports AP channel switch.
  */
 enum nl80211_feature_flags {
 	NL80211_FEATURE_SK_TX_STATUS	= 1 << 0,
 	NL80211_FEATURE_HT_IBSS		= 1 << 1,
 	NL80211_FEATURE_INACTIVITY_TIMER = 1 << 2,
 	NL80211_FEATURE_CELL_BASE_REG_HINTS = 1 << 3,
+	NL80211_FEATURE_AP_CH_SWITCH	= 1 << 4,
 
 	/* leave room for new feature flags */
 	NL80211_FEATURE_SCHED_SCAN_INTERVALS  = 1 << 20,
