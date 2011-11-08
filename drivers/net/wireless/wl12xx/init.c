@@ -254,17 +254,17 @@ static int wl12xx_init_phy_vif_config(struct wl1271 *wl,
 	return 0;
 }
 
-static int wl1271_init_beacon_filter(struct wl1271 *wl,
-				     struct wl12xx_vif *wlvif)
+static int wl1271_init_sta_beacon_filter(struct wl1271 *wl,
+					 struct wl12xx_vif *wlvif)
 {
 	int ret;
 
-	/* disable beacon filtering at this stage */
-	ret = wl1271_acx_beacon_filter_opt(wl, wlvif, false);
+	ret = wl1271_acx_beacon_filter_table(wl, wlvif);
 	if (ret < 0)
 		return ret;
 
-	ret = wl1271_acx_beacon_filter_table(wl, wlvif);
+	/* enable beacon filtering */
+	ret = wl1271_acx_beacon_filter_opt(wl, wlvif, true);
 	if (ret < 0)
 		return ret;
 
@@ -501,7 +501,7 @@ int wl1271_chip_specific_init(struct wl1271 *wl)
 	if (wl->chip.id == CHIP_ID_1283_PG20) {
 		u32 host_cfg_bitmap = HOST_IF_CFG_RX_FIFO_ENABLE;
 
-		if (wl->quirks & WL12XX_QUIRK_BLOCKSIZE_ALIGNMENT)
+		if (!(wl->quirks & WL12XX_QUIRK_NO_BLOCKSIZE_ALIGNMENT))
 			/* Enable SDIO padding */
 			host_cfg_bitmap |= HOST_IF_CFG_TX_PAD_TO_SDIO_BLK;
 
@@ -529,7 +529,7 @@ static int wl12xx_init_sta_role(struct wl1271 *wl, struct wl12xx_vif *wlvif)
 		return ret;
 
 	/* Beacon filtering */
-	ret = wl1271_init_beacon_filter(wl, wlvif);
+	ret = wl1271_init_sta_beacon_filter(wl, wlvif);
 	if (ret < 0)
 		return ret;
 

@@ -1313,7 +1313,16 @@ static int wl1271_chip_wakeup(struct wl1271 *wl)
 	/* 0. read chip id from CHIP_ID */
 	wl->chip.id = wl1271_read32(wl, CHIP_ID_B);
 
-	/* 1. check if chip id is valid */
+	/*
+	 * For wl127x based devices we could use the default block
+	 * size (512 bytes), but due to a bug in the sdio driver, we
+	 * need to set it explicitly after the chip is powered on.  To
+	 * simplify the code and since the performance impact is
+	 * negligible, we use the same block size for all different
+	 * chip types.
+	 */
+	if (!wl1271_set_block_size(wl))
+		wl->quirks |= WL12XX_QUIRK_NO_BLOCKSIZE_ALIGNMENT;
 
 	switch (wl->chip.id) {
 	case CHIP_ID_1271_PG10:
@@ -1323,7 +1332,9 @@ static int wl1271_chip_wakeup(struct wl1271 *wl)
 		ret = wl1271_setup(wl);
 		if (ret < 0)
 			goto out;
+		wl->quirks |= WL12XX_QUIRK_NO_BLOCKSIZE_ALIGNMENT;
 		break;
+
 	case CHIP_ID_1271_PG20:
 		wl1271_debug(DEBUG_BOOT, "chip id 0x%x (1271 PG20)",
 			     wl->chip.id);
@@ -1331,7 +1342,9 @@ static int wl1271_chip_wakeup(struct wl1271 *wl)
 		ret = wl1271_setup(wl);
 		if (ret < 0)
 			goto out;
+		wl->quirks |= WL12XX_QUIRK_NO_BLOCKSIZE_ALIGNMENT;
 		break;
+
 	case CHIP_ID_1283_PG20:
 		wl1271_debug(DEBUG_BOOT, "chip id 0x%x (1283 PG20)",
 			     wl->chip.id);
@@ -1339,9 +1352,6 @@ static int wl1271_chip_wakeup(struct wl1271 *wl)
 		ret = wl1271_setup(wl);
 		if (ret < 0)
 			goto out;
-
-		if (wl1271_set_block_size(wl))
-			wl->quirks |= WL12XX_QUIRK_BLOCKSIZE_ALIGNMENT;
 		break;
 	case CHIP_ID_1283_PG10:
 	default:
@@ -1859,7 +1869,6 @@ static void wl1271_op_stop(struct ieee80211_hw *hw)
 	wl->tx_results_count = 0;
 	wl->tx_packets_count = 0;
 	wl->time_offset = 0;
-	wl->vif = NULL;
 	wl->tx_spare_blocks = TX_HW_BLOCK_SPARE_DEFAULT;
 	wl->ap_fw_ps_map = 0;
 	wl->ap_ps_map = 0;
@@ -2211,6 +2220,8 @@ static void __wl1271_op_remove_interface(struct wl1271 *wl,
 	if (!test_and_clear_bit(WLVIF_FLAG_INITIALIZED, &wlvif->flags))
 		return;
 
+	wl->vif = NULL;
+
 	/* because of hardware recovery, we may get here twice */
 	if (wl->state != WL1271_STATE_ON)
 		return;
@@ -2429,11 +2440,7 @@ static int wl1271_sta_handle_idle(struct wl1271 *wl, struct wl12xx_vif *wlvif,
 	if (idle) {
 		/* no need to croc if we weren't busy (e.g. during boot) */
 		if (wl12xx_is_roc(wl)) {
-			ret = wl12xx_croc(wl, wlvif->dev_role_id);
-			if (ret < 0)
-				goto out;
-
-			ret = wl12xx_cmd_role_stop_dev(wl, wlvif);
+			ret = wl12xx_stop_dev(wl, wlvif);
 			if (ret < 0)
 				goto out;
 		}
@@ -2455,11 +2462,7 @@ static int wl1271_sta_handle_idle(struct wl1271 *wl, struct wl12xx_vif *wlvif,
 			ieee80211_sched_scan_stopped(wl->hw);
 		}
 
-		ret = wl12xx_cmd_role_start_dev(wl, wlvif);
-		if (ret < 0)
-			goto out;
-
-		ret = wl12xx_roc(wl, wlvif, wlvif->dev_role_id);
+		ret = wl12xx_start_dev(wl, wlvif);
 		if (ret < 0)
 			goto out;
 		clear_bit(WL1271_FLAG_IDLE, &wl->flags);
@@ -2525,26 +2528,16 @@ static int wl12xx_config_vif(struct wl1271 *wl, struct wl12xx_vif *wlvif,
 				 */
 				if (wl12xx_is_roc(wl) &&
 				    !(conf->flags & IEEE80211_CONF_IDLE)) {
-					ret = wl12xx_croc(wl,
-							  wlvif->dev_role_id);
+					ret = wl12xx_stop_dev(wl, wlvif);
 					if (ret < 0)
 						return ret;
 
-					ret = wl12xx_roc(wl, wlvif,
-							 wlvif->dev_role_id);
+					ret = wl12xx_start_dev(wl, wlvif);
 					if (ret < 0)
-						wl1271_warning("roc failed %d",
-							       ret);
+						return ret;
 				}
 			}
 		}
-	}
-
-	if (changed & IEEE80211_CONF_CHANGE_IDLE && !is_ap) {
-		ret = wl1271_sta_handle_idle(wl, wlvif,
-					conf->flags & IEEE80211_CONF_IDLE);
-		if (ret < 0)
-			wl1271_warning("idle mode change failed %d", ret);
 	}
 
 	/*
@@ -3087,8 +3080,7 @@ static int wl1271_op_hw_scan(struct ieee80211_hw *hw,
 			ret = -EBUSY;
 			goto out_sleep;
 		}
-		wl12xx_croc(wl, wlvif->dev_role_id);
-		wl12xx_cmd_role_stop_dev(wl, wlvif);
+		wl12xx_stop_dev(wl, wlvif);
 	}
 
 	ret = wl1271_scan(hw->priv, vif, ssid, len, req);
@@ -3599,8 +3591,7 @@ static void wl1271_bss_info_changed_sta(struct wl1271 *wl,
 			if (test_and_clear_bit(WLVIF_FLAG_IBSS_JOINED,
 					       &wlvif->flags)) {
 				wl1271_unjoin(wl, wlvif);
-				wl12xx_cmd_role_start_dev(wl, wlvif);
-				wl12xx_roc(wl, wlvif, wlvif->dev_role_id);
+				wl12xx_start_dev(wl, wlvif);
 			}
 		}
 	}
@@ -3617,6 +3608,12 @@ static void wl1271_bss_info_changed_sta(struct wl1271 *wl,
 			     bss_conf->enable_beacon ? "enabled" : "disabled");
 
 		do_join = true;
+	}
+
+	if (changed & BSS_CHANGED_IDLE) {
+		ret = wl1271_sta_handle_idle(wl, wlvif, bss_conf->idle);
+		if (ret < 0)
+			wl1271_warning("idle mode change failed %d", ret);
 	}
 
 	if ((changed & BSS_CHANGED_CQM)) {
@@ -3776,11 +3773,8 @@ sta_not_found:
 				}
 
 				wl1271_unjoin(wl, wlvif);
-				if (!(conf_flags & IEEE80211_CONF_IDLE)) {
-					wl12xx_cmd_role_start_dev(wl, wlvif);
-					wl12xx_roc(wl, wlvif,
-						   wlvif->dev_role_id);
-				}
+				if (!(conf_flags & IEEE80211_CONF_IDLE))
+					wl12xx_start_dev(wl, wlvif);
 			}
 		}
 	}
@@ -3859,11 +3853,7 @@ sta_not_found:
 		 * STA role). TODO: make it better.
 		 */
 		if (wlvif->dev_role_id != WL12XX_INVALID_ROLE_ID) {
-			ret = wl12xx_croc(wl, wlvif->dev_role_id);
-			if (ret < 0)
-				goto out;
-
-			ret = wl12xx_cmd_role_stop_dev(wl, wlvif);
+			ret = wl12xx_stop_dev(wl, wlvif);
 			if (ret < 0)
 				goto out;
 		}
@@ -4338,7 +4328,7 @@ static int wl12xx_set_bitrate_mask(struct ieee80211_hw *hw,
 {
 	struct wl12xx_vif *wlvif = wl12xx_vif_to_data(vif);
 	struct wl1271 *wl = hw->priv;
-	int i;
+	int i, ret = 0;
 
 	wl1271_debug(DEBUG_MAC80211, "mac80211 set_bitrate_mask 0x%x 0x%x",
 		mask->control[NL80211_BAND_2GHZ].legacy,
@@ -4351,9 +4341,28 @@ static int wl12xx_set_bitrate_mask(struct ieee80211_hw *hw,
 			wl1271_tx_enabled_rates_get(wl,
 						    mask->control[i].legacy,
 						    i);
+
+	if (unlikely(wl->state == WL1271_STATE_OFF))
+		goto out;
+
+	if (wlvif->bss_type == BSS_TYPE_STA_BSS &&
+	    !test_bit(WLVIF_FLAG_STA_ASSOCIATED, &wlvif->flags)) {
+
+		ret = wl1271_ps_elp_wakeup(wl);
+		if (ret < 0)
+			goto out;
+
+		wl1271_set_band_rate(wl, wlvif);
+		wlvif->basic_rate =
+			wl1271_tx_min_rate_get(wl, wlvif->basic_rate_set);
+		ret = wl1271_acx_sta_rate_policies(wl, wlvif);
+
+		wl1271_ps_elp_sleep(wl);
+	}
+out:
 	mutex_unlock(&wl->mutex);
 
-	return 0;
+	return ret;
 }
 
 static void wl12xx_op_channel_switch(struct ieee80211_hw *hw,
