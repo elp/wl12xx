@@ -1203,11 +1203,9 @@ static void ieee80211_send_null_response(struct ieee80211_sub_if_data *sdata,
 	memcpy(nullfunc->addr2, sdata->vif.addr, ETH_ALEN);
 	memcpy(nullfunc->addr3, sdata->vif.addr, ETH_ALEN);
 
+	skb->priority = tid;
+	skb_set_queue_mapping(skb, ieee802_1d_to_ac[tid]);
 	if (qos) {
-		skb->priority = tid;
-
-		skb_set_queue_mapping(skb, ieee802_1d_to_ac[tid]);
-
 		nullfunc->qos_ctrl = cpu_to_le16(tid);
 
 		if (reason == IEEE80211_FRAME_RELEASE_UAPSD)
@@ -1356,12 +1354,12 @@ ieee80211_sta_ps_deliver_response(struct sta_info *sta,
 			 * Use MoreData flag to indicate whether there are
 			 * more buffered frames for this STA
 			 */
-			if (!more_data)
-				hdr->frame_control &=
-					cpu_to_le16(~IEEE80211_FCTL_MOREDATA);
-			else
+			if (more_data || !skb_queue_empty(&frames))
 				hdr->frame_control |=
 					cpu_to_le16(IEEE80211_FCTL_MOREDATA);
+			else
+				hdr->frame_control &=
+					cpu_to_le16(~IEEE80211_FCTL_MOREDATA);
 
 			if (ieee80211_is_data_qos(hdr->frame_control) ||
 			    ieee80211_is_qos_nullfunc(hdr->frame_control))

@@ -728,15 +728,9 @@ static void lbs_scan_worker(struct work_struct *work)
 		le16_to_cpu(scan_cmd->hdr.size),
 		lbs_ret_scan, 0);
 
-	if (priv->scan_channel >= priv->scan_req->n_channels) {
+	if (priv->scan_channel >= priv->scan_req->n_channels)
 		/* Mark scan done */
-		if (priv->internal_scan)
-			kfree(priv->scan_req);
-		else
-			cfg80211_scan_done(priv->scan_req, false);
-
-		priv->scan_req = NULL;
-	}
+		lbs_scan_done(priv);
 
 	/* Restart network */
 	if (carrier)
@@ -772,6 +766,21 @@ static void _internal_start_scan(struct lbs_private *priv, bool internal,
 	priv->internal_scan = internal;
 
 	lbs_deb_leave(LBS_DEB_CFG80211);
+}
+
+/*
+ * Clean up priv->scan_req.  Should be used to handle the allocation details.
+ */
+void lbs_scan_done(struct lbs_private *priv)
+{
+	WARN_ON(!priv->scan_req);
+
+	if (priv->internal_scan)
+		kfree(priv->scan_req);
+	else
+		cfg80211_scan_done(priv->scan_req, false);
+
+	priv->scan_req = NULL;
 }
 
 static int lbs_cfg_scan(struct wiphy *wiphy,
@@ -1666,27 +1675,19 @@ static int lbs_change_intf(struct wiphy *wiphy, struct net_device *dev,
 	if (dev == priv->mesh_dev)
 		return -EOPNOTSUPP;
 
-	lbs_deb_enter(LBS_DEB_CFG80211);
-
 	switch (type) {
 	case NL80211_IFTYPE_MONITOR:
-		ret = lbs_set_monitor_mode(priv, 1);
-		break;
 	case NL80211_IFTYPE_STATION:
-		if (priv->wdev->iftype == NL80211_IFTYPE_MONITOR)
-			ret = lbs_set_monitor_mode(priv, 0);
-		if (!ret)
-			ret = lbs_set_snmp_mib(priv, SNMP_MIB_OID_BSS_TYPE, 1);
-		break;
 	case NL80211_IFTYPE_ADHOC:
-		if (priv->wdev->iftype == NL80211_IFTYPE_MONITOR)
-			ret = lbs_set_monitor_mode(priv, 0);
-		if (!ret)
-			ret = lbs_set_snmp_mib(priv, SNMP_MIB_OID_BSS_TYPE, 2);
 		break;
 	default:
-		ret = -ENOTSUPP;
+		return -EOPNOTSUPP;
 	}
+
+	lbs_deb_enter(LBS_DEB_CFG80211);
+
+	if (priv->iface_running)
+		ret = lbs_set_iface_type(priv, type);
 
 	if (!ret)
 		priv->wdev->iftype = type;
