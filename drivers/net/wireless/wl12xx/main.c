@@ -2462,15 +2462,9 @@ static void wl1271_set_band_rate(struct wl1271 *wl, struct wl12xx_vif *wlvif)
 	wlvif->rate_set = wlvif->basic_rate_set;
 }
 
-static bool wl12xx_is_roc(struct wl1271 *wl)
+static bool wl12xx_dev_role_started(struct wl12xx_vif *wlvif)
 {
-	u8 role_id;
-
-	role_id = find_first_bit(wl->roc_map, WL12XX_MAX_ROLES);
-	if (role_id >= WL12XX_MAX_ROLES)
-		return false;
-
-	return true;
+	return wlvif->dev_hlid != WL12XX_INVALID_LINK_ID;
 }
 
 static int wl1271_sta_handle_idle(struct wl1271 *wl, struct wl12xx_vif *wlvif,
@@ -2484,7 +2478,7 @@ static int wl1271_sta_handle_idle(struct wl1271 *wl, struct wl12xx_vif *wlvif,
 
 	if (idle) {
 		/* no need to croc if we weren't busy (e.g. during boot) */
-		if (wl12xx_is_roc(wl)) {
+		if (wl12xx_dev_role_started(wlvif)) {
 			ret = wl12xx_stop_dev(wl, wlvif);
 			if (ret < 0)
 				goto out;
@@ -2554,7 +2548,7 @@ static int wl12xx_config_vif(struct wl1271 *wl, struct wl12xx_vif *wlvif,
 
 			if (test_bit(WLVIF_FLAG_STA_ASSOCIATED,
 				     &wlvif->flags)) {
-				if (wl12xx_is_roc(wl)) {
+				if (wl12xx_dev_role_started(wlvif)) {
 					/* roaming */
 					ret = wl12xx_croc(wl,
 							  wlvif->dev_role_id);
@@ -2571,7 +2565,7 @@ static int wl12xx_config_vif(struct wl1271 *wl, struct wl12xx_vif *wlvif,
 				 * not idle. otherwise, CROC will be called
 				 * anyway.
 				 */
-				if (wl12xx_is_roc(wl) &&
+				if (wl12xx_dev_role_started(wlvif) &&
 				    !(conf->flags & IEEE80211_CONF_IDLE)) {
 					ret = wl12xx_stop_dev(wl, wlvif);
 					if (ret < 0)
@@ -3111,15 +3105,16 @@ static int wl1271_op_hw_scan(struct ieee80211_hw *hw,
 	if (ret < 0)
 		goto out;
 
-	/* cancel ROC before scanning */
-	if (wl12xx_is_roc(wl)) {
-		if (test_bit(WLVIF_FLAG_STA_ASSOCIATED, &wlvif->flags)) {
-			/* don't allow scanning right now */
-			ret = -EBUSY;
-			goto out_sleep;
-		}
-		wl12xx_croc(wl, wlvif->dev_role_id);
+	if (test_bit(WLVIF_FLAG_STA_ASSOCIATED, &wlvif->flags) &&
+	    test_bit(wlvif->role_id, wl->roc_map)) {
+		/* don't allow scanning right now */
+		ret = -EBUSY;
+		goto out_sleep;
 	}
+
+	/* cancel ROC before scanning */
+	if (wl12xx_dev_role_started(wlvif))
+		wl12xx_croc(wl, wlvif->dev_role_id);
 
 	ret = wl1271_scan(hw->priv, vif, ssid, len, req);
 out_sleep:
