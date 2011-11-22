@@ -2703,8 +2703,6 @@ static int wl12xx_config_vif(struct wl1271 *wl, struct wl12xx_vif *wlvif,
 						 STATION_ACTIVE_MODE);
 			if (ret < 0)
 				wl1271_warning("exit auto ps failed %d", ret);
-
-			ieee80211_send_null(wl12xx_wlvif_to_vif(wlvif));
 		}
 	}
 
