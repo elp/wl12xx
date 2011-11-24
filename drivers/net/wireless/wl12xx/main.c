@@ -1076,7 +1076,7 @@ static int wl12xx_fetch_firmware(struct wl1271 *wl, bool plt)
 			fw_name	= WL127X_FW_NAME;
 	}
 
-	if (wl->fw_type == fw_type)
+	if (wl->saved_fw_type == fw_type)
 		return 0;
 
 	wl1271_debug(DEBUG_BOOT, "booting firmware %s", fw_name);
@@ -1096,7 +1096,7 @@ static int wl12xx_fetch_firmware(struct wl1271 *wl, bool plt)
 	}
 
 	vfree(wl->fw);
-	wl->fw_type = WL12XX_FW_TYPE_NONE;
+	wl->saved_fw_type = WL12XX_FW_TYPE_NONE;
 	wl->fw_len = fw->size;
 	wl->fw = vmalloc(wl->fw_len);
 
@@ -1108,7 +1108,7 @@ static int wl12xx_fetch_firmware(struct wl1271 *wl, bool plt)
 
 	memcpy(wl->fw, fw->data, wl->fw_len);
 	ret = 0;
-	wl->fw_type = fw_type;
+	wl->saved_fw_type = fw_type;
 out:
 	release_firmware(fw);
 
@@ -2200,6 +2200,9 @@ static bool wl12xx_need_fw_change(struct ieee80211_hw *hw,
 				  bool add)
 {
 	u8 open_count;
+
+	if (ieee80211_suspending(hw))
+		return false;
 
 	open_count = ieee80211_get_open_count(hw, vif);
 	if (add)
@@ -5233,6 +5236,7 @@ static struct ieee80211_hw *wl1271_alloc_hw(void)
 
 	wl->state = WL1271_STATE_OFF;
 	wl->fw_type = WL12XX_FW_TYPE_NONE;
+	wl->saved_fw_type = WL12XX_FW_TYPE_NONE;
 	mutex_init(&wl->mutex);
 
 	/* Apply default driver configuration. */
@@ -5304,6 +5308,7 @@ static int wl1271_free_hw(struct wl1271 *wl)
 
 	vfree(wl->fw);
 	wl->fw = NULL;
+	wl->saved_fw_type = WL12XX_FW_TYPE_NONE;
 	kfree(wl->nvs);
 	wl->nvs = NULL;
 
