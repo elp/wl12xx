@@ -2210,12 +2210,18 @@ static bool wl12xx_need_fw_change(struct ieee80211_hw *hw,
 				  enum wl12xx_fw_type current_fw,
 				  bool add)
 {
+	struct wl1271 *wl = hw->priv;
 	u8 open_count;
 
 	if (ieee80211_suspending(hw))
 		return false;
 
+	if (test_bit(WL1271_FLAG_VIF_CHANGE_IN_PROGRESS, &wl->flags))
+		return false;
+
 	open_count = ieee80211_get_open_count(hw, vif);
+	wl1271_info("open_count=%d, add=%d, current_fw=%d",
+		open_count, add, current_fw);
 	if (add)
 		open_count++;
 
@@ -2479,14 +2485,17 @@ int wl12xx_op_change_interface(struct ieee80211_hw *hw,
 			       struct ieee80211_vif *vif,
 			       enum nl80211_iftype new_type, bool p2p)
 {
+	struct wl1271 *wl = hw->priv;
 	int ret;
 
+	set_bit(WL1271_FLAG_VIF_CHANGE_IN_PROGRESS, &wl->flags);
 	wl1271_op_remove_interface(hw, vif);
 
 	/* this is ugly... */
 	vif->type = ieee80211_iftype_p2p(new_type, p2p);
 	ret = wl1271_op_add_interface(hw, vif);
 
+	clear_bit(WL1271_FLAG_VIF_CHANGE_IN_PROGRESS, &wl->flags);
 	return ret;
 }
 static int wl1271_join(struct wl1271 *wl, struct wl12xx_vif *wlvif,
