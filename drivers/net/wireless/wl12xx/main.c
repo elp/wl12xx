@@ -2246,6 +2246,12 @@ static void wl12xx_force_active_psm(struct wl1271 *wl)
 		wl1271_ps_set_mode(wl, wlvif, STATION_POWER_SAVE_MODE);
 	}
 }
+
+static bool wl12xx_dev_role_started(struct wl12xx_vif *wlvif)
+{
+	return wlvif->dev_hlid != WL12XX_INVALID_LINK_ID;
+}
+
 static int wl1271_op_add_interface(struct ieee80211_hw *hw,
 				   struct ieee80211_vif *vif)
 {
@@ -2390,6 +2396,9 @@ static void __wl1271_op_remove_interface(struct wl1271 *wl,
 			goto deinit;
 
 		if (wlvif->bss_type == BSS_TYPE_STA_BSS) {
+			if (wl12xx_dev_role_started(wlvif))
+				wl12xx_stop_dev(wl, wlvif);
+
 			ret = wl12xx_cmd_role_disable(wl, &wlvif->dev_role_id);
 			if (ret < 0)
 				goto deinit;
@@ -2585,11 +2594,6 @@ static void wl1271_set_band_rate(struct wl1271 *wl, struct wl12xx_vif *wlvif)
 {
 	wlvif->basic_rate_set = wlvif->bitrate_masks[wlvif->band];
 	wlvif->rate_set = wlvif->basic_rate_set;
-}
-
-static bool wl12xx_dev_role_started(struct wl12xx_vif *wlvif)
-{
-	return wlvif->dev_hlid != WL12XX_INVALID_LINK_ID;
 }
 
 static int wl1271_sta_handle_idle(struct wl1271 *wl, struct wl12xx_vif *wlvif,
