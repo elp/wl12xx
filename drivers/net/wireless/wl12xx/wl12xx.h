@@ -48,8 +48,8 @@
 #define WL127X_FW_NAME "ti-connectivity/wl127x-fw-mr.bin.r4"
 #define WL128X_FW_NAME_MULTI "ti-connectivity/wl128x-fw-mr.bin.r5"
 #define WL128X_FW_NAME_SINGLE "ti-connectivity/wl128x-fw-mr.bin.r4"
-#define WL127X_PLT_FW_NAME "ti-connectivity/wl127x-fw-3-plt.bin"
-#define WL128X_PLT_FW_NAME "ti-connectivity/wl128x-fw-3-plt.bin"
+#define WL127X_PLT_FW_NAME "ti-connectivity/wl127x-fw-mr-plt.bin"
+#define WL128X_PLT_FW_NAME "ti-connectivity/wl128x-fw-mr-plt.bin"
 
 /*
  * wl127x and wl128x are using the same NVS file name. However, the
