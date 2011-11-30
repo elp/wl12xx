@@ -293,7 +293,7 @@ static void wl1271_tx_fill_hdr(struct wl1271 *wl, struct wl12xx_vif *wlvif,
 
 	desc = (struct wl1271_tx_hw_descr *) skb->data;
 	frame_start = (u8 *)(desc + 1);
-	hdr = (struct ieee80211_hdr *)frame_start + extra;
+	hdr = (struct ieee80211_hdr *)(frame_start + extra);
 	frame_control = hdr->frame_control;
 
 	/* relocate space for security header */
