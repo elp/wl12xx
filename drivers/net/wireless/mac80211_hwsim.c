@@ -310,6 +310,9 @@ struct mac80211_hwsim_data {
 	struct dentry *debugfs_ps;
 
 	struct sk_buff_head pending;	/* packets pending */
+	struct sk_buff_head pending_results;
+
+	struct delayed_work netstack_work;
 	/*
 	 * Only radios in the same group can communicate together (the
 	 * channel has to match too). Each bit represents a group. A
@@ -356,6 +359,23 @@ static struct nla_policy hwsim_genl_policy[HWSIM_ATTR_MAX + 1] = {
 					struct hwsim_tx_rate)},
 	[HWSIM_ATTR_COOKIE] = { .type = NLA_U64 },
 };
+
+static void netstack_work(struct work_struct *work)
+{
+	struct sk_buff *skb;
+	struct delayed_work *dwork;
+	struct mac80211_hwsim_data *data;
+
+	dwork = container_of(work, struct delayed_work, work);
+	data = container_of(dwork, struct mac80211_hwsim_data, netstack_work);
+
+	wiphy_debug(data->hw->wiphy,
+		    "%s: Going to pass back results!\n", __func__);
+
+	/* Pass all received frames to the network stack */
+	while ((skb = skb_dequeue(&data->pending_results)))
+		ieee80211_tx_status_irqsafe(data->hw, skb);
+}
 
 static netdev_tx_t hwsim_mon_xmit(struct sk_buff *skb,
 					struct net_device *dev)
@@ -662,10 +682,18 @@ static bool mac80211_hwsim_tx_frame_no_nl(struct ieee80211_hw *hw,
 
 static void mac80211_hwsim_tx(struct ieee80211_hw *hw, struct sk_buff *skb)
 {
-	bool ack;
+	struct mac80211_hwsim_data *data = hw->priv;
+	bool ack, delay_ack = false;
 	struct ieee80211_tx_info *txi;
 	int _pid;
+	struct ieee80211_hdr *hdr;
 
+	hdr = (struct ieee80211_hdr *)skb->data;
+	if (ieee80211_is_assoc_resp(hdr->frame_control) ||
+	    ieee80211_is_reassoc_resp(hdr->frame_control)) {
+		wiphy_debug(hw->wiphy, "(re)assoc resp\n");
+		delay_ack = true;
+	}
 	mac80211_hwsim_monitor_rx(hw, skb);
 
 	if (skb->len < 10) {
@@ -698,7 +726,14 @@ static void mac80211_hwsim_tx(struct ieee80211_hw *hw, struct sk_buff *skb)
 	ieee80211_tx_info_clear_status(txi);
 	if (!(txi->flags & IEEE80211_TX_CTL_NO_ACK) && ack)
 		txi->flags |= IEEE80211_TX_STAT_ACK;
-	ieee80211_tx_status_irqsafe(hw, skb);
+
+	if (delay_ack) {
+		skb_queue_tail(&data->pending_results, skb);
+		ieee80211_queue_delayed_work(hw, &data->netstack_work,
+					     msecs_to_jiffies(2000));
+	} else {
+		ieee80211_tx_status_irqsafe(hw, skb);
+	}
 }
 
 
@@ -1716,6 +1751,8 @@ static int __init init_mac80211_hwsim(void)
 		}
 		data->dev->driver = &mac80211_hwsim_driver;
 		skb_queue_head_init(&data->pending);
+		skb_queue_head_init(&data->pending_results);
+		INIT_DELAYED_WORK(&data->netstack_work, netstack_work);
 
 		SET_IEEE80211_DEV(hw, data->dev);
 		addr[3] = i >> 8;
