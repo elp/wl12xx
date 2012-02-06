@@ -1409,7 +1409,7 @@ static void wl1271_recovery_work(struct work_struct *work)
 
 	mutex_lock(&wl->mutex);
 
-	if (wl->state != WL1271_STATE_ON)
+	if (wl->state != WL1271_STATE_ON || wl->plt)
 		goto out_unlock;
 
 	if (!test_bit(WL1271_FLAG_INTENDED_FW_RECOVERY, &wl->flags)) {
@@ -1617,7 +1617,8 @@ int wl1271_plt_start(struct wl1271 *wl)
 		if (ret < 0)
 			goto irq_disable;
 
-		wl->state = WL1271_STATE_PLT;
+		wl->plt = true;
+		wl->state = WL1271_STATE_ON;
 		wl1271_notice("firmware booted in PLT mode (%s)",
 			      wl->chip.fw_ver_str);
 
@@ -1666,7 +1667,7 @@ int wl1271_plt_stop(struct wl1271 *wl)
 	 */
 	wl1271_disable_interrupts(wl);
 	mutex_lock(&wl->mutex);
-	if (wl->state != WL1271_STATE_PLT) {
+	if (!wl->plt) {
 		mutex_unlock(&wl->mutex);
 
 		/*
@@ -1694,6 +1695,7 @@ int wl1271_plt_stop(struct wl1271 *wl)
 	wl1271_power_off(wl);
 	wl->flags = 0;
 	wl->state = WL1271_STATE_OFF;
+	wl->plt = false;
 	wl->rx_counter = 0;
 	mutex_unlock(&wl->mutex);
 
@@ -6023,7 +6025,7 @@ out:
 
 static void wl1271_unregister_hw(struct wl1271 *wl)
 {
-	if (wl->state == WL1271_STATE_PLT)
+	if (wl->plt)
 		wl1271_plt_stop(wl);
 
 	unregister_netdevice_notifier(&wl1271_dev_notifier);
@@ -6285,7 +6287,6 @@ static int wl1271_free_hw(struct wl1271 *wl)
 
 	vfree(wl->fw);
 	wl->fw = NULL;
-	wl->saved_fw_type = WL12XX_FW_TYPE_NONE;
 	kfree(wl->nvs);
 	wl->nvs = NULL;
 

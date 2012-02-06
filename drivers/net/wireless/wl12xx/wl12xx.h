@@ -104,7 +104,6 @@
 enum wl1271_state {
 	WL1271_STATE_OFF,
 	WL1271_STATE_ON,
-	WL1271_STATE_PLT,
 };
 
 enum wl12xx_fw_type {
@@ -361,6 +360,7 @@ struct wl1271 {
 	enum wl1271_state state;
 	enum wl12xx_fw_type fw_type;
 	enum wl12xx_fw_type saved_fw_type;
+	bool plt;
 	struct mutex mutex;
 
 	unsigned long flags;
