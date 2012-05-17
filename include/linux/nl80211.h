@@ -583,6 +583,8 @@
  *      disabled (marked by the presence of @NL80211_ATTR_ROAMING_DISABLED flag)
  *      userspace should disable background scans and roaming attempts.
  *
+ * @NL80211_CMD_REQ_CH_SW: Request a channel switch from a GO/AP.
+ *
  * @NL80211_CMD_MAX: highest used command number
  * @__NL80211_CMD_AFTER_LAST: internal use
  */
@@ -732,6 +734,8 @@ enum nl80211_commands {
 	NL80211_CMD_IM_SCAN_RESULT,
 
 	NL80211_CMD_ROAMING_SUPPORT,
+
+	NL80211_CMD_REQ_CH_SW,
 
 	/* add new commands above here */
 

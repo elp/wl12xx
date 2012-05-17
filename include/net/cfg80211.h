@@ -3325,6 +3325,18 @@ bool cfg80211_rx_unexpected_4addr_frame(struct net_device *dev,
 					const u8 *addr, gfp_t gfp);
 
 /**
+ * cfg80211_req_channel_switch - request channel switch for GO/AP
+ * @dev: The device the frame matched to
+ * @gfp: context flags
+ * &chan: desired channel
+ *
+ * This function is used in AP/GO mode to request userspace to switch
+ * to a new channel.
+ */
+void cfg80211_req_channel_switch(struct net_device *dev,
+				 struct ieee80211_channel *chan, gfp_t gfp);
+
+/**
  * cfg80211_probe_status - notify userspace about probe status
  * @dev: the device the probe was sent on
  * @addr: the address of the peer

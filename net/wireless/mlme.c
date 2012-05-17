@@ -1169,3 +1169,14 @@ bool cfg80211_rx_unexpected_4addr_frame(struct net_device *dev,
 	return nl80211_unexpected_4addr_frame(dev, addr, gfp);
 }
 EXPORT_SYMBOL(cfg80211_rx_unexpected_4addr_frame);
+
+void cfg80211_req_channel_switch(struct net_device *dev,
+				 struct ieee80211_channel *chan, gfp_t gfp)
+{
+	struct wireless_dev *wdev = dev->ieee80211_ptr;
+	struct wiphy *wiphy = wdev->wiphy;
+	struct cfg80211_registered_device *rdev = wiphy_to_dev(wiphy);
+
+	nl80211_req_channel_switch(rdev, chan, dev, gfp);
+}
+EXPORT_SYMBOL(cfg80211_req_channel_switch);
