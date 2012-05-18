@@ -1091,6 +1091,11 @@ void wl1271_tx_flush(struct wl1271 *wl)
 	start_time = jiffies;
 	timeout = start_time + usecs_to_jiffies(WL1271_TX_FLUSH_TIMEOUT);
 
+	/* only one flush should be in progress, for consistent queue state */
+	mutex_lock(&wl->flush_mutex);
+
+	wlcore_stop_queues(wl, WLCORE_QUEUE_STOP_REASON_FLUSH);
+
 	while (!time_after(jiffies, timeout)) {
 		mutex_lock(&wl->mutex);
 		wl1271_debug(DEBUG_MAC80211, "flushing tx buffer: %d %d",
@@ -1101,7 +1106,7 @@ void wl1271_tx_flush(struct wl1271 *wl)
 			mutex_unlock(&wl->mutex);
 			wl1271_debug(DEBUG_MAC80211, "tx flush took %d ms",
 				     jiffies_to_msecs(jiffies - start_time));
-			return;
+			goto out;
 		}
 		mutex_unlock(&wl->mutex);
 		msleep(1);
@@ -1116,6 +1121,10 @@ void wl1271_tx_flush(struct wl1271 *wl)
 	for (i = 0; i < WL12XX_MAX_LINKS; i++)
 		wl1271_tx_reset_link_queues(wl, i);
 	mutex_unlock(&wl->mutex);
+
+out:
+	wlcore_wake_queues(wl, WLCORE_QUEUE_STOP_REASON_FLUSH);
+	mutex_unlock(&wl->flush_mutex);
 }
 
 u32 wl1271_tx_min_rate_get(struct wl1271 *wl, u32 rate_set)

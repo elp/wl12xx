@@ -568,6 +568,9 @@ struct wl1271 {
 
 	/* work to fire when Tx is stuck */
 	struct delayed_work tx_watchdog_work;
+
+	/* mutex for protecting the tx_flush function */
+	struct mutex flush_mutex;
 };
 
 struct wl1271_station {

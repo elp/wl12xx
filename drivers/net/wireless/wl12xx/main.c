@@ -6206,6 +6206,7 @@ static struct ieee80211_hw *wl1271_alloc_hw(void)
 	wl->fw_type = WL12XX_FW_TYPE_NONE;
 	wl->saved_fw_type = WL12XX_FW_TYPE_NONE;
 	mutex_init(&wl->mutex);
+	mutex_init(&wl->flush_mutex);
 
 	/* Apply default driver configuration. */
 	wl1271_conf_init(wl);
