@@ -74,6 +74,9 @@
 #define WL12XX_INVALID_ROLE_ID     0xff
 #define WL12XX_INVALID_LINK_ID     0xff
 
+/* the driver supports the 2.4Ghz and 5Ghz bands */
+#define WLCORE_NUM_BANDS           2
+
 #define WL12XX_MAX_RATE_POLICIES 16
 
 /* Defined by FW as 0. Will not be freed or allocated. */
@@ -514,7 +517,7 @@ struct wl1271 {
 	s8 noise;
 
 	/* bands supported by this instance of wl12xx */
-	struct ieee80211_supported_band bands[IEEE80211_NUM_BANDS];
+	struct ieee80211_supported_band bands[WLCORE_NUM_BANDS];
 
 	int tcxo_clock;
 
@@ -627,7 +630,7 @@ struct wl12xx_vif {
 	enum ieee80211_band band;
 	int channel;
 
-	u32 bitrate_masks[IEEE80211_NUM_BANDS];
+	u32 bitrate_masks[WLCORE_NUM_BANDS];
 	u32 basic_rate_set;
 
 	/*
