@@ -1183,7 +1183,7 @@ static int wl12xx_fetch_firmware(struct wl1271 *wl, bool plt)
 	int ret;
 	u8 open_count;
 
-	open_count = ieee80211_get_open_count(wl->hw, NULL);
+	open_count = ieee80211_started_vifs_count(wl->hw);
 	if (plt) {
 		fw_type = WL12XX_FW_TYPE_PLT;
 		if (wl->chip.id == CHIP_ID_1283_PG20)
@@ -2645,25 +2645,20 @@ static bool wl12xx_dev_role_started(struct wl12xx_vif *wlvif)
 	return wlvif->dev_hlid != WL12XX_INVALID_LINK_ID;
 }
 
-static bool wl12xx_need_fw_change(struct ieee80211_hw *hw,
-				  struct ieee80211_vif *vif,
-				  enum wl12xx_fw_type current_fw,
-				  bool add)
+static bool wl12xx_need_fw_change(struct wl1271 *wl)
 {
-	struct wl1271 *wl = hw->priv;
 	u8 open_count;
+	enum wl12xx_fw_type current_fw = wl->fw_type;
 
-	if (ieee80211_suspending(hw))
+	if (ieee80211_suspending(wl->hw))
 		return false;
-
+#if 0
 	if (test_bit(WL1271_FLAG_VIF_CHANGE_IN_PROGRESS, &wl->flags))
 		return false;
-
-	open_count = ieee80211_get_open_count(hw, vif);
-	wl1271_info("open_count=%d, add=%d, current_fw=%d",
-		open_count, add, current_fw);
-	if (add)
-		open_count++;
+#endif
+	open_count = ieee80211_started_vifs_count(wl->hw);
+	wl1271_info("open_count=%d, current_fw=%d",
+		open_count, current_fw);
 
 	if (open_count > 1 && current_fw == WL12XX_FW_TYPE_NORMAL)
 		return true;
@@ -2686,6 +2681,18 @@ static void wl12xx_force_active_psm(struct wl1271 *wl)
 		wl1271_ps_set_mode(wl, wlvif, STATION_POWER_SAVE_MODE);
 	}
 }
+
+static bool wl12xx_change_fw_if_needed(struct wl1271 *wl)
+{
+	if (!wl12xx_need_fw_change(wl))
+		return false;
+
+	wl12xx_force_active_psm(wl);
+	set_bit(WL1271_FLAG_INTENDED_FW_RECOVERY, &wl->flags);
+	wl12xx_queue_recovery_work(wl);
+	return true;
+}
+
 static int wl1271_op_add_interface(struct ieee80211_hw *hw,
 				   struct ieee80211_vif *vif)
 {
@@ -2725,14 +2732,6 @@ static int wl1271_op_add_interface(struct ieee80211_hw *hw,
 	if (role_type == WL12XX_INVALID_ROLE_TYPE) {
 		ret = -EINVAL;
 		goto out;
-	}
-
-	if (wl12xx_need_fw_change(hw, vif, wl->fw_type, true)) {
-		wl12xx_force_active_psm(wl);
-		set_bit(WL1271_FLAG_INTENDED_FW_RECOVERY, &wl->flags);
-		mutex_unlock(&wl->mutex);
-		wl1271_recovery_work(&wl->recovery_work);
-		return 0;
 	}
 
 	/*
@@ -2947,12 +2946,6 @@ static void wl1271_op_remove_interface(struct ieee80211_hw *hw,
 		break;
 	}
 	WARN_ON(iter != wlvif);
-	if (wl12xx_need_fw_change(hw, vif, wl->fw_type, false)) {
-		wl12xx_force_active_psm(wl);
-		set_bit(WL1271_FLAG_INTENDED_FW_RECOVERY, &wl->flags);
-		wl12xx_queue_recovery_work(wl);
-		cancel_recovery = false;
-	}
 out:
 	mutex_unlock(&wl->mutex);
 	if (cancel_recovery)
@@ -3000,6 +2993,9 @@ static int wl1271_join(struct wl1271 *wl, struct wl12xx_vif *wlvif,
 
 	if (set_assoc)
 		set_bit(WLVIF_FLAG_STA_ASSOCIATED, &wlvif->flags);
+
+	if (wl12xx_change_fw_if_needed(wl))
+		goto out;
 
 	if (is_ibss)
 		ret = wl12xx_cmd_role_start_ibss(wl, wlvif);
@@ -3049,6 +3045,9 @@ static int wl1271_unjoin(struct wl1271 *wl, struct wl12xx_vif *wlvif)
 		wl12xx_cmd_stop_channel_switch(wl);
 		ieee80211_chswitch_done(vif, false);
 	}
+
+	/* we want to clean tx_security anyway, so don't go out */
+	wl12xx_change_fw_if_needed(wl);
 
 	/* to stop listening to a channel, we disconnect */
 	ret = wl12xx_cmd_role_stop_sta(wl, wlvif);
@@ -4253,6 +4252,9 @@ static void wl1271_bss_info_changed_ap(struct wl1271 *wl,
 	if ((changed & BSS_CHANGED_BEACON_ENABLED)) {
 		if (bss_conf->enable_beacon) {
 			if (!test_bit(WLVIF_FLAG_AP_STARTED, &wlvif->flags)) {
+				if (wl12xx_change_fw_if_needed(wl))
+					goto out;
+
 				ret = wl12xx_cmd_role_start_ap(wl, wlvif);
 				if (ret < 0)
 					goto out;
@@ -4266,6 +4268,9 @@ static void wl1271_bss_info_changed_ap(struct wl1271 *wl,
 			}
 		} else {
 			if (test_bit(WLVIF_FLAG_AP_STARTED, &wlvif->flags)) {
+				if (wl12xx_change_fw_if_needed(wl))
+					goto out;
+
 				ret = wl12xx_cmd_role_stop_ap(wl, wlvif);
 				if (ret < 0)
 					goto out;
