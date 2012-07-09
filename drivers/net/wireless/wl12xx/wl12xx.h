@@ -456,6 +456,12 @@ struct wl1271 {
 
 	/* Hardware recovery work */
 	struct work_struct recovery_work;
+	/*
+	 * delayed recovery work - we use a separate work
+	 * in order to prevent big changes. however, me
+	 * may want to reconisder it...
+	 */
+	struct delayed_work delayed_recovery;
 
 	/* The mbox event mask */
 	u32 event_mask;

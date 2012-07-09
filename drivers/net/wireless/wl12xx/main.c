@@ -2369,6 +2369,9 @@ static void wl1271_op_stop_locked(struct wl1271 *wl)
 	mutex_unlock(&wl_list_mutex);
 
 	wlcore_synchronize_interrupts(wl);
+	cancel_delayed_work_sync(&wl->delayed_recovery);
+	if (!test_bit(WL1271_FLAG_RECOVERY_IN_PROGRESS, &wl->flags))
+		cancel_work_sync(&wl->recovery_work);
 	wl1271_flush_deferred_work(wl);
 	cancel_delayed_work_sync(&wl->scan_complete_work);
 	cancel_work_sync(&wl->netstack_work);
@@ -2645,13 +2648,26 @@ static bool wl12xx_dev_role_started(struct wl12xx_vif *wlvif)
 	return wlvif->dev_hlid != WL12XX_INVALID_LINK_ID;
 }
 
-static bool wl12xx_need_fw_change(struct wl1271 *wl)
+enum fw_change_type {
+	FW_CHANGE_NONE,
+	FW_CHANGE_SR_TO_MR,
+	FW_CHANGE_MR_TO_SR,
+};
+
+/*
+ * possible return values:
+ * 0 - no fw change
+ * 1 - SR -> MR
+ * 2 - MR -> SR
+ */
+static enum fw_change_type
+wl12xx_need_fw_change(struct wl1271 *wl)
 {
 	u8 open_count;
 	enum wl12xx_fw_type current_fw = wl->fw_type;
 
 	if (ieee80211_suspending(wl->hw))
-		return false;
+		return FW_CHANGE_NONE;
 #if 0
 	if (test_bit(WL1271_FLAG_VIF_CHANGE_IN_PROGRESS, &wl->flags))
 		return false;
@@ -2661,11 +2677,11 @@ static bool wl12xx_need_fw_change(struct wl1271 *wl)
 		open_count, current_fw);
 
 	if (open_count > 1 && current_fw == WL12XX_FW_TYPE_NORMAL)
-		return true;
+		return FW_CHANGE_SR_TO_MR;
 	if (open_count <= 1 && current_fw == WL12XX_FW_TYPE_MULTI)
-		return true;
+		return FW_CHANGE_MR_TO_SR;
 
-	return false;
+	return FW_CHANGE_NONE;
 
 }
 
@@ -2684,13 +2700,38 @@ static void wl12xx_force_active_psm(struct wl1271 *wl)
 
 static bool wl12xx_change_fw_if_needed(struct wl1271 *wl)
 {
-	if (!wl12xx_need_fw_change(wl))
+	enum fw_change_type change_type;
+	int timeout = 0;
+
+	cancel_delayed_work(&wl->delayed_recovery);
+
+	change_type = wl12xx_need_fw_change(wl);
+	if (change_type == FW_CHANGE_NONE)
 		return false;
+
+	/* give some grace period in MR to SR case */
+	if (change_type == FW_CHANGE_MR_TO_SR)
+		timeout = 30000;
+
+	wl1271_debug(DEBUG_CMD, "queue delayed recovery in %d msecs", timeout);
+	ieee80211_queue_delayed_work(wl->hw, &wl->delayed_recovery,
+				     msecs_to_jiffies(timeout));
+	return true;
+}
+
+void wl12xx_delayed_recovery_work(struct work_struct *work)
+{
+	struct delayed_work *dwork;
+	struct wl1271 *wl;
+
+	dwork = container_of(work, struct delayed_work, work);
+	wl = container_of(dwork, struct wl1271, delayed_recovery);
+
+	wl1271_debug(DEBUG_CMD, "delayed recovery");
 
 	wl12xx_force_active_psm(wl);
 	set_bit(WL1271_FLAG_INTENDED_FW_RECOVERY, &wl->flags);
 	wl12xx_queue_recovery_work(wl);
-	return true;
 }
 
 static int wl1271_op_add_interface(struct ieee80211_hw *hw,
@@ -2926,7 +2967,6 @@ static void wl1271_op_remove_interface(struct ieee80211_hw *hw,
 	struct wl1271 *wl = hw->priv;
 	struct wl12xx_vif *wlvif = wl12xx_vif_to_data(vif);
 	struct wl12xx_vif *iter;
-	bool cancel_recovery = true;
 
 	mutex_lock(&wl->mutex);
 
@@ -2948,8 +2988,6 @@ static void wl1271_op_remove_interface(struct ieee80211_hw *hw,
 	WARN_ON(iter != wlvif);
 out:
 	mutex_unlock(&wl->mutex);
-	if (cancel_recovery)
-		cancel_work_sync(&wl->recovery_work);
 }
 
 static int wl12xx_op_change_interface(struct ieee80211_hw *hw,
@@ -4268,8 +4306,7 @@ static void wl1271_bss_info_changed_ap(struct wl1271 *wl,
 			}
 		} else {
 			if (test_bit(WLVIF_FLAG_AP_STARTED, &wlvif->flags)) {
-				if (wl12xx_change_fw_if_needed(wl))
-					goto out;
+				wl12xx_change_fw_if_needed(wl);
 
 				ret = wl12xx_cmd_role_stop_ap(wl, wlvif);
 				if (ret < 0)
@@ -6092,6 +6129,7 @@ static struct ieee80211_hw *wl1271_alloc_hw(void)
 	INIT_WORK(&wl->netstack_work, wl1271_netstack_work);
 	INIT_WORK(&wl->tx_work, wl1271_tx_work);
 	INIT_WORK(&wl->recovery_work, wl1271_recovery_work);
+	INIT_DELAYED_WORK(&wl->delayed_recovery, wl12xx_delayed_recovery_work);
 	INIT_DELAYED_WORK(&wl->scan_complete_work, wl1271_scan_complete_work);
 	INIT_DELAYED_WORK(&wl->tx_watchdog_work, wl12xx_tx_watchdog_work);
 
