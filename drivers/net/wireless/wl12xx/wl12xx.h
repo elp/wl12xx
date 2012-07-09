@@ -462,6 +462,7 @@ struct wl1271 {
 	 * may want to reconisder it...
 	 */
 	struct delayed_work delayed_recovery;
+	bool force_mr_fw;
 
 	/* The mbox event mask */
 	u32 event_mask;
@@ -742,6 +743,7 @@ void wl12xx_update_sta_state(struct wl1271 *wl,
 			     struct ieee80211_sta *sta,
 			     enum ieee80211_sta_state state);
 int wl12xx_init_pll_clock(struct wl1271 *wl, int *selected_clock);
+bool wl12xx_change_fw_if_needed(struct wl1271 *wl);
 
 #define JOIN_TIMEOUT 5000 /* 5000 milliseconds to join */
 

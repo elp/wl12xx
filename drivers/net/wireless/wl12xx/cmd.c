@@ -1953,6 +1953,8 @@ int wl12xx_start_dev(struct wl1271 *wl, struct wl12xx_vif *wlvif)
 {
 	int ret;
 
+	wl12xx_change_fw_if_needed(wl);
+
 	if (WARN_ON(!(wlvif->bss_type == BSS_TYPE_STA_BSS ||
 		      wlvif->bss_type == BSS_TYPE_IBSS)))
 		return -EINVAL;
@@ -1977,6 +1979,8 @@ out:
 int wl12xx_stop_dev(struct wl1271 *wl, struct wl12xx_vif *wlvif)
 {
 	int ret;
+
+	wl12xx_change_fw_if_needed(wl);
 
 	if (WARN_ON(!(wlvif->bss_type == BSS_TYPE_STA_BSS ||
 		      wlvif->bss_type == BSS_TYPE_IBSS)))

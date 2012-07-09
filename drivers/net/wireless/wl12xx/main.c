@@ -1184,6 +1184,17 @@ static int wl12xx_fetch_firmware(struct wl1271 *wl, bool plt)
 	u8 open_count;
 
 	open_count = ieee80211_started_vifs_count(wl->hw);
+	if (wl->force_mr_fw) {
+		if (open_count <= 1) {
+			wl1271_info("forcing mr firmware");
+			open_count = 2;
+		}
+		wl->force_mr_fw = false;
+		/* go back to correct fw after grace period */
+		ieee80211_queue_delayed_work(wl->hw, &wl->delayed_recovery,
+					     msecs_to_jiffies(5000));
+	}
+
 	if (plt) {
 		fw_type = WL12XX_FW_TYPE_PLT;
 		if (wl->chip.id == CHIP_ID_1283_PG20)
@@ -2673,8 +2684,8 @@ wl12xx_need_fw_change(struct wl1271 *wl)
 		return false;
 #endif
 	open_count = ieee80211_started_vifs_count(wl->hw);
-	wl1271_info("open_count=%d, current_fw=%d",
-		open_count, current_fw);
+	wl1271_info("open_count=%d, current_fw=%d (force_mr=%d)",
+		open_count, current_fw, wl->force_mr_fw);
 
 	if (open_count > 1 && current_fw == WL12XX_FW_TYPE_NORMAL)
 		return FW_CHANGE_SR_TO_MR;
@@ -2698,7 +2709,8 @@ static void wl12xx_force_active_psm(struct wl1271 *wl)
 	}
 }
 
-static bool wl12xx_change_fw_if_needed(struct wl1271 *wl)
+/* return true only on SR -> MR fw switch */
+bool wl12xx_change_fw_if_needed(struct wl1271 *wl)
 {
 	enum fw_change_type change_type;
 	int timeout = 0;
@@ -2716,18 +2728,32 @@ static bool wl12xx_change_fw_if_needed(struct wl1271 *wl)
 	wl1271_debug(DEBUG_CMD, "queue delayed recovery in %d msecs", timeout);
 	ieee80211_queue_delayed_work(wl->hw, &wl->delayed_recovery,
 				     msecs_to_jiffies(timeout));
-	return true;
+	return change_type == FW_CHANGE_SR_TO_MR;
 }
 
 void wl12xx_delayed_recovery_work(struct work_struct *work)
 {
 	struct delayed_work *dwork;
 	struct wl1271 *wl;
+	enum fw_change_type change_type;
 
 	dwork = container_of(work, struct delayed_work, work);
 	wl = container_of(dwork, struct wl1271, delayed_recovery);
 
 	wl1271_debug(DEBUG_CMD, "delayed recovery");
+
+	/* check recovery is still needed. */
+	change_type = wl12xx_need_fw_change(wl);
+	if (change_type == FW_CHANGE_NONE)
+		return;
+
+	/*
+	 * the recovery itself might cancel need to MR fw
+	 * (e.g. during p2p_find), so force the next fw
+	 * load to be MR fw.
+	 */
+	if (change_type == FW_CHANGE_SR_TO_MR)
+		wl->force_mr_fw = true;
 
 	wl12xx_force_active_psm(wl);
 	set_bit(WL1271_FLAG_INTENDED_FW_RECOVERY, &wl->flags);
@@ -3139,7 +3165,6 @@ static int wl1271_sta_handle_idle(struct wl1271 *wl, struct wl12xx_vif *wlvif,
 			wl1271_scan_sched_scan_stop(wl, wlvif);
 			ieee80211_sched_scan_stopped(wl->hw);
 		}
-
 		ret = wl12xx_start_dev(wl, wlvif);
 		if (ret < 0)
 			goto out;
