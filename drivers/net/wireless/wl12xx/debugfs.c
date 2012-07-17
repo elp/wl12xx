@@ -444,6 +444,21 @@ static const struct file_operations forced_ps_ops = {
 	.llseek = default_llseek,
 };
 
+static ssize_t vif_count_read(struct file *file, char __user *user_buf,
+			  size_t count, loff_t *ppos)
+{
+	struct wl1271 *wl = file->private_data;
+
+	return wl1271_format_buffer(user_buf, count,
+				    ppos, "%d\n",
+				    ieee80211_started_vifs_count(wl->hw));
+}
+
+static const struct file_operations vif_count_ops = {
+	.read = vif_count_read,
+	.open = wl1271_open_file_generic,
+	.llseek = default_llseek,
+};
 
 static ssize_t split_scan_timeout_read(struct file *file, char __user *user_buf,
 			  size_t count, loff_t *ppos)
@@ -1179,6 +1194,7 @@ static int wl1271_debugfs_add_files(struct wl1271 *wl,
 	DEBUGFS_ADD(forced_ps, rootdir);
 	DEBUGFS_ADD(split_scan_timeout, rootdir);
 	DEBUGFS_ADD(elp_timeout, rootdir);
+	DEBUGFS_ADD(vif_count, rootdir);
 
 	streaming = debugfs_create_dir("rx_streaming", rootdir);
 	if (!streaming || IS_ERR(streaming))
