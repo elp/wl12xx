@@ -5846,6 +5846,7 @@ static void wl12xx_derive_mac_addresses(struct wl1271 *wl,
 					u32 oui, u32 nic, int n)
 {
 	int i;
+	u32 cur_nic;
 
 	wl1271_debug(DEBUG_PROBE, "base address: oui %06x nic %06x, n %d",
 		     oui, nic, n);
@@ -5853,14 +5854,26 @@ static void wl12xx_derive_mac_addresses(struct wl1271 *wl,
 	if (nic + n - 1 > 0xffffff)
 		wl1271_warning("NIC part of the MAC address wraps around!");
 
-	for (i = 0; i < n; i++) {
+	cur_nic = nic;
+	for (i = 0; i < 2; i++) {
 		wl->addresses[i].addr[0] = (u8)(oui >> 16);
 		wl->addresses[i].addr[1] = (u8)(oui >> 8);
 		wl->addresses[i].addr[2] = (u8) oui;
-		wl->addresses[i].addr[3] = (u8)(nic >> 16);
-		wl->addresses[i].addr[4] = (u8)(nic >> 8);
-		wl->addresses[i].addr[5] = (u8) nic;
-		nic++;
+		wl->addresses[i].addr[3] = (u8)(cur_nic >> 16);
+		wl->addresses[i].addr[4] = (u8)(cur_nic >> 8);
+		wl->addresses[i].addr[5] = (u8) cur_nic;
+		cur_nic++;
+	}
+
+	/* turn on the LAA bit in the third mac address */
+	if (n == 3) {
+		oui |= BIT(17);
+		wl->addresses[2].addr[0] = (u8)(oui >> 16);
+		wl->addresses[2].addr[1] = (u8)(oui >> 8);
+		wl->addresses[2].addr[2] = (u8) oui;
+		wl->addresses[2].addr[3] = (u8)(nic >> 16);
+		wl->addresses[2].addr[4] = (u8)(nic >> 8);
+		wl->addresses[2].addr[5] = (u8) nic;
 	}
 
 	wl->hw->wiphy->n_addresses = n;
@@ -5996,7 +6009,7 @@ static int wl1271_register_hw(struct wl1271 *wl)
 		nic_addr = wl->fuse_nic_addr + 1;
 	}
 
-	wl12xx_derive_mac_addresses(wl, oui_addr, nic_addr, 2);
+	wl12xx_derive_mac_addresses(wl, oui_addr, nic_addr, NUM_MAC_ADDRESSES);
 
 	ret = ieee80211_register_hw(wl->hw);
 	if (ret < 0) {

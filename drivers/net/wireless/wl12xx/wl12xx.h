@@ -99,6 +99,8 @@
 
 #define WL1271_AGGR_BUFFER_SIZE (4 * PAGE_SIZE)
 
+#define NUM_MAC_ADDRESSES          3
+
 enum wl1271_state {
 	WL1271_STATE_OFF,
 	WL1271_STATE_ON,
@@ -382,7 +384,7 @@ struct wl1271 {
 	u32 fuse_nic_addr;
 
 	/* we have up to 2 MAC addresses */
-	struct mac_address addresses[2];
+	struct mac_address addresses[NUM_MAC_ADDRESSES];
 	int channel;
 	u8 system_hlid;
 
