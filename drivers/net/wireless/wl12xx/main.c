@@ -2684,8 +2684,8 @@ wl12xx_need_fw_change(struct wl1271 *wl)
 		return false;
 #endif
 	open_count = ieee80211_started_vifs_count(wl->hw);
-	wl1271_info("open_count=%d, current_fw=%d (force_mr=%d)",
-		open_count, current_fw, wl->force_mr_fw);
+	wl1271_debug(DEBUG_CMD, "open_count=%d, current_fw=%d (force_mr=%d)",
+		     open_count, current_fw, wl->force_mr_fw);
 
 	if (open_count > 1 && current_fw == WL12XX_FW_TYPE_NORMAL)
 		return FW_CHANGE_SR_TO_MR;
