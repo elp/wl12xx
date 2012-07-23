@@ -1092,25 +1092,30 @@ void wl12xx_tx_reset(struct wl1271 *wl, bool reset_tx_queues)
 /* caller must *NOT* hold wl->mutex */
 void wl1271_tx_flush(struct wl1271 *wl)
 {
-	unsigned long timeout;
+	unsigned long timeout, start_time;
 	int i;
-	timeout = jiffies + usecs_to_jiffies(WL1271_TX_FLUSH_TIMEOUT);
+	start_time = jiffies;
+	timeout = start_time + usecs_to_jiffies(WL1271_TX_FLUSH_TIMEOUT);
 
 	while (!time_after(jiffies, timeout)) {
 		mutex_lock(&wl->mutex);
-		wl1271_debug(DEBUG_TX, "flushing tx buffer: %d %d",
+		wl1271_debug(DEBUG_MAC80211, "flushing tx buffer: %d %d",
 			     wl->tx_frames_cnt,
 			     wl1271_tx_total_queue_count(wl));
 		if ((wl->tx_frames_cnt == 0) &&
 		    (wl1271_tx_total_queue_count(wl) == 0)) {
 			mutex_unlock(&wl->mutex);
+			wl1271_debug(DEBUG_MAC80211, "tx flush took %d ms",
+				     jiffies_to_msecs(jiffies - start_time));
 			return;
 		}
 		mutex_unlock(&wl->mutex);
 		msleep(1);
 	}
 
-	wl1271_warning("Unable to flush all TX buffers, timed out.");
+	wl1271_warning("Unable to flush all TX buffers, "
+		       "timed out (timeout %d ms",
+		       WL1271_TX_FLUSH_TIMEOUT / 1000);
 
 	/* forcibly flush all Tx buffers on our queues */
 	mutex_lock(&wl->mutex);
