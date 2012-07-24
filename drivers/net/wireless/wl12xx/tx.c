@@ -720,7 +720,7 @@ int wl1271_tx_work_locked(struct wl1271 *wl)
 	int ret = 0;
 	int bus_ret = 0;
 
-	if (unlikely(wl->state == WL1271_STATE_OFF))
+	if (unlikely(wl->state != WLCORE_STATE_ON))
 		return 0;
 
 	while ((skb = wl1271_skb_dequeue(wl))) {

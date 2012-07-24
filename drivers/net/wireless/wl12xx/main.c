@@ -473,7 +473,7 @@ static int wl1271_dev_notify(struct notifier_block *me, unsigned long what,
 
 	mutex_lock(&wl->mutex);
 
-	if (wl->state == WL1271_STATE_OFF)
+	if (wl->state != WLCORE_STATE_ON)
 		goto out;
 
 	if (dev->operstate != IF_OPER_UP)
@@ -663,7 +663,7 @@ static void wl12xx_tx_watchdog_work(struct work_struct *work)
 
 	mutex_lock(&wl->mutex);
 
-	if (unlikely(wl->state == WL1271_STATE_OFF))
+	if (unlikely(wl->state != WLCORE_STATE_ON))
 		goto out;
 
 	/* Tx went out in the meantime - everything is ok */
@@ -1038,7 +1038,7 @@ static int wl12xx_irq_locked(struct wl1271 *wl)
 
 	wl1271_debug(DEBUG_IRQ, "IRQ work");
 
-	if (unlikely(wl->state == WL1271_STATE_OFF))
+	if (unlikely(wl->state != WLCORE_STATE_ON))
 		goto out;
 
 	ret = wl1271_ps_elp_wakeup(wl);
@@ -1291,6 +1291,7 @@ void wl12xx_queue_recovery_work(struct wl1271 *wl)
 
 	/* Avoid a recursive recovery */
 	if (!test_and_set_bit(WL1271_FLAG_RECOVERY_IN_PROGRESS, &wl->flags)) {
+		wl->state = WLCORE_STATE_RESTARTING;
 		wlcore_disable_interrupts_nosync(wl);
 #ifdef CONFIG_HAS_WAKELOCK
 		/* give us a grace period for recovery */
@@ -1409,7 +1410,7 @@ static void wl1271_recovery_work(struct work_struct *work)
 
 	mutex_lock(&wl->mutex);
 
-	if (wl->state != WL1271_STATE_ON || wl->plt)
+	if (wl->state == WLCORE_STATE_OFF || wl->plt)
 		goto out_unlock;
 
 	if (!test_bit(WL1271_FLAG_INTENDED_FW_RECOVERY, &wl->flags)) {
@@ -1596,7 +1597,7 @@ int wl1271_plt_start(struct wl1271 *wl)
 
 	wl1271_notice("power up");
 
-	if (wl->state != WL1271_STATE_OFF) {
+	if (wl->state != WLCORE_STATE_OFF) {
 		wl1271_error("cannot go into PLT state because not "
 			     "in off state: %d", wl->state);
 		ret = -EBUSY;
@@ -1618,7 +1619,7 @@ int wl1271_plt_start(struct wl1271 *wl)
 			goto irq_disable;
 
 		wl->plt = true;
-		wl->state = WL1271_STATE_ON;
+		wl->state = WLCORE_STATE_ON;
 		wl1271_notice("firmware booted in PLT mode (%s)",
 			      wl->chip.fw_ver_str);
 
@@ -1634,7 +1635,7 @@ irq_disable:
 		/* Unlocking the mutex in the middle of handling is
 		   inherently unsafe. In this case we deem it safe to do,
 		   because we need to let any possibly pending IRQ out of
-		   the system (and while we are WL1271_STATE_OFF the IRQ
+		   the system (and while we are WLCORE_STATE_OFF the IRQ
 		   work function will not do anything.) Also, any other
 		   possible concurrent operations will fail due to the
 		   current state, hence the wl1271 struct should be safe. */
@@ -1694,7 +1695,7 @@ int wl1271_plt_stop(struct wl1271 *wl)
 	mutex_lock(&wl->mutex);
 	wl1271_power_off(wl);
 	wl->flags = 0;
-	wl->state = WL1271_STATE_OFF;
+	wl->state = WLCORE_STATE_OFF;
 	wl->plt = false;
 	wl->rx_counter = 0;
 	mutex_unlock(&wl->mutex);
@@ -2365,7 +2366,7 @@ static void wl1271_op_stop_locked(struct wl1271 *wl)
 {
 	int i;
 
-	if (wl->state == WL1271_STATE_OFF) {
+	if (wl->state == WLCORE_STATE_OFF) {
 		if (test_and_clear_bit(WL1271_FLAG_RECOVERY_IN_PROGRESS,
 				       &wl->flags))
 			wl1271_enable_interrupts(wl);
@@ -2377,7 +2378,7 @@ static void wl1271_op_stop_locked(struct wl1271 *wl)
 	 * this must be before the cancel_work calls below, so that the work
 	 * functions don't perform further work.
 	 */
-	wl->state = WL1271_STATE_OFF;
+	wl->state = WLCORE_STATE_OFF;
 
 	/*
 	 * Use the nosync variant to disable interrupts, so the mutex could be
@@ -2624,7 +2625,7 @@ irq_disable:
 		/* Unlocking the mutex in the middle of handling is
 		   inherently unsafe. In this case we deem it safe to do,
 		   because we need to let any possibly pending IRQ out of
-		   the system (and while we are WL1271_STATE_OFF the IRQ
+		   the system (and while we are WLCORE_STATE_OFF the IRQ
 		   work function will not do anything.) Also, any other
 		   possible concurrent operations will fail due to the
 		   current state, hence the wl1271 struct should be safe. */
@@ -2659,7 +2660,7 @@ power_off:
 	wl1271_debug(DEBUG_MAC80211, "11a is %ssupported",
 		     wl->enable_11a ? "" : "not ");
 
-	wl->state = WL1271_STATE_ON;
+	wl->state = WLCORE_STATE_ON;
 	wl->watchdog_recovery = false;
 out:
 	return booted;
@@ -2828,7 +2829,7 @@ static int wl1271_op_add_interface(struct ieee80211_hw *hw,
 	 * to start(), and make sure here the driver is ON.
 	 */
 	wl1271_info("state: %d", wl->state);
-	if (wl->state == WL1271_STATE_OFF) {
+	if (wl->state == WLCORE_STATE_OFF) {
 		/*
 		 * we still need this in order to configure the fw
 		 * while uploading the nvs
@@ -2886,7 +2887,7 @@ static void __wl1271_op_remove_interface(struct wl1271 *wl,
 		return;
 
 	/* because of hardware recovery, we may get here twice */
-	if (wl->state != WL1271_STATE_ON)
+	if (wl->state == WLCORE_STATE_OFF)
 		return;
 
 	wl1271_info("down");
@@ -2999,7 +3000,7 @@ static void wl1271_op_remove_interface(struct ieee80211_hw *hw,
 
 	mutex_lock(&wl->mutex);
 
-	if (wl->state == WL1271_STATE_OFF ||
+	if (wl->state == WLCORE_STATE_OFF ||
 	    !test_bit(WLVIF_FLAG_INITIALIZED, &wlvif->flags))
 		goto out;
 
@@ -3337,7 +3338,7 @@ static int wl1271_op_config(struct ieee80211_hw *hw, u32 changed)
 	if (changed & IEEE80211_CONF_CHANGE_POWER)
 		wl->power_level = conf->power_level;
 
-	if (unlikely(wl->state == WL1271_STATE_OFF))
+	if (unlikely(wl->state != WLCORE_STATE_ON))
 		goto out;
 
 	ret = wl1271_ps_elp_wakeup(wl);
@@ -3371,10 +3372,6 @@ static u64 wl1271_op_prepare_multicast(struct ieee80211_hw *hw,
 {
 	struct wl1271_filter_params *fp;
 	struct netdev_hw_addr *ha;
-	struct wl1271 *wl = hw->priv;
-
-	if (unlikely(wl->state == WL1271_STATE_OFF))
-		return 0;
 
 	fp = kzalloc(sizeof(*fp), GFP_ATOMIC);
 	if (!fp) {
@@ -3423,7 +3420,7 @@ static void wl1271_op_configure_filter(struct ieee80211_hw *hw,
 	*total &= WL1271_SUPPORTED_FILTERS;
 	changed &= WL1271_SUPPORTED_FILTERS;
 
-	if (unlikely(wl->state == WL1271_STATE_OFF))
+	if (unlikely(wl->state != WLCORE_STATE_ON))
 		goto out;
 
 	ret = wl1271_ps_elp_wakeup(wl);
@@ -3655,7 +3652,7 @@ static int wl1271_op_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 
 	mutex_lock(&wl->mutex);
 
-	if (unlikely(wl->state == WL1271_STATE_OFF)) {
+	if (unlikely(wl->state != WLCORE_STATE_ON)) {
 		ret = -EAGAIN;
 		goto out_unlock;
 	}
@@ -3845,7 +3842,7 @@ static void wl1271_op_cancel_hw_scan(struct ieee80211_hw *hw,
 
 	mutex_lock(&wl->mutex);
 
-	if (wl->state == WL1271_STATE_OFF)
+	if (unlikely(wl->state != WLCORE_STATE_ON))
 		goto out;
 
 	if (wl->scan.state == WL1271_SCAN_STATE_IDLE)
@@ -3894,7 +3891,7 @@ static int wl1271_op_sched_scan_start(struct ieee80211_hw *hw,
 
 	mutex_lock(&wl->mutex);
 
-	if (wl->state == WL1271_STATE_OFF) {
+	if (unlikely(wl->state != WLCORE_STATE_ON)) {
 		ret = -EAGAIN;
 		goto out;
 	}
@@ -3931,7 +3928,7 @@ static void wl1271_op_sched_scan_stop(struct ieee80211_hw *hw,
 
 	mutex_lock(&wl->mutex);
 
-	if (wl->state == WL1271_STATE_OFF)
+	if (unlikely(wl->state != WLCORE_STATE_ON))
 		goto out;
 
 	ret = wl1271_ps_elp_wakeup(wl);
@@ -3952,7 +3949,7 @@ static int wl1271_op_set_frag_threshold(struct ieee80211_hw *hw, u32 value)
 
 	mutex_lock(&wl->mutex);
 
-	if (unlikely(wl->state == WL1271_STATE_OFF)) {
+	if (unlikely(wl->state != WLCORE_STATE_ON)) {
 		ret = -EAGAIN;
 		goto out;
 	}
@@ -3981,7 +3978,7 @@ static int wl1271_op_set_rts_threshold(struct ieee80211_hw *hw, u32 value)
 
 	mutex_lock(&wl->mutex);
 
-	if (unlikely(wl->state == WL1271_STATE_OFF)) {
+	if (unlikely(wl->state != WLCORE_STATE_ON)) {
 		ret = -EAGAIN;
 		goto out;
 	}
@@ -4749,7 +4746,7 @@ static void wl1271_op_bss_info_changed(struct ieee80211_hw *hw,
 
 	mutex_lock(&wl->mutex);
 
-	if (unlikely(wl->state == WL1271_STATE_OFF))
+	if (unlikely(wl->state != WLCORE_STATE_ON))
 		goto out;
 
 	if (unlikely(!test_bit(WLVIF_FLAG_INITIALIZED, &wlvif->flags)))
@@ -4783,7 +4780,7 @@ static void wl1271_op_get_current_rssi(struct ieee80211_hw *hw,
 
 	mutex_lock(&wl->mutex);
 
-	if (unlikely(wl->state == WL1271_STATE_OFF))
+	if (unlikely(wl->state != WLCORE_STATE_ON))
 		goto out;
 
 	if (wlvif->bss_type != BSS_TYPE_STA_BSS)
@@ -4816,7 +4813,7 @@ static int wl12xx_op_set_rx_filters(struct ieee80211_hw *hw,
 
 	wl1271_debug(DEBUG_MAC80211, "mac80211 set rx filters");
 
-	if (unlikely(wl->state == WL1271_STATE_OFF))
+	if (unlikely(wl->state != WLCORE_STATE_ON))
 		goto out;
 
 	ret = wl1271_ps_elp_wakeup(wl);
@@ -4895,7 +4892,7 @@ static u64 wl1271_op_get_tsf(struct ieee80211_hw *hw,
 
 	mutex_lock(&wl->mutex);
 
-	if (unlikely(wl->state == WL1271_STATE_OFF))
+	if (unlikely(wl->state != WLCORE_STATE_ON))
 		goto out;
 
 	ret = wl1271_ps_elp_wakeup(wl);
@@ -5051,7 +5048,7 @@ static int wl1271_op_sta_add(struct ieee80211_hw *hw,
 
 	mutex_lock(&wl->mutex);
 
-	if (unlikely(wl->state == WL1271_STATE_OFF))
+	if (unlikely(wl->state != WLCORE_STATE_ON))
 		goto out;
 
 	if (wlvif->bss_type != BSS_TYPE_AP_BSS)
@@ -5098,7 +5095,7 @@ static int wl1271_op_sta_remove(struct ieee80211_hw *hw,
 		goto out;
 	}
 
-	if (unlikely(wl->state == WL1271_STATE_OFF))
+	if (unlikely(wl->state != WLCORE_STATE_ON))
 		goto out;
 
 	if (wlvif->bss_type != BSS_TYPE_AP_BSS)
@@ -5146,7 +5143,7 @@ void wl12xx_op_sta_state(struct ieee80211_hw *hw,
 
 	mutex_lock(&wl->mutex);
 
-	if (unlikely(wl->state == WL1271_STATE_OFF))
+	if (unlikely(wl->state != WLCORE_STATE_ON))
 		goto out;
 
 	if (wlvif->bss_type != BSS_TYPE_AP_BSS)
@@ -5183,7 +5180,7 @@ static int wl1271_op_ampdu_action(struct ieee80211_hw *hw,
 
 	mutex_lock(&wl->mutex);
 
-	if (unlikely(wl->state == WL1271_STATE_OFF)) {
+	if (unlikely(wl->state != WLCORE_STATE_ON)) {
 		ret = -EAGAIN;
 		goto out;
 	}
@@ -5297,7 +5294,7 @@ static int wl12xx_set_bitrate_mask(struct ieee80211_hw *hw,
 						    mask->control[i].legacy,
 						    i);
 
-	if (unlikely(wl->state == WL1271_STATE_OFF))
+	if (unlikely(wl->state != WLCORE_STATE_ON))
 		goto out;
 
 	if (wlvif->bss_type == BSS_TYPE_STA_BSS &&
@@ -5333,11 +5330,13 @@ static void wl12xx_op_channel_switch(struct ieee80211_hw *hw,
 
 	mutex_lock(&wl->mutex);
 
-	if (unlikely(wl->state == WL1271_STATE_OFF)) {
+	if (unlikely(wl->state == WLCORE_STATE_OFF)) {
 		wl12xx_for_each_wlvif_sta(wl, wlvif) {
 			struct ieee80211_vif *vif = wl12xx_wlvif_to_vif(wlvif);
 			ieee80211_chswitch_done(vif, false);
 		}
+		goto out;
+	} else if (unlikely(wl->state != WLCORE_STATE_ON)) {
 		goto out;
 	}
 
@@ -5366,7 +5365,7 @@ static bool wl1271_tx_frames_pending(struct ieee80211_hw *hw)
 
 	mutex_lock(&wl->mutex);
 
-	if (unlikely(wl->state == WL1271_STATE_OFF))
+	if (unlikely(wl->state != WLCORE_STATE_ON))
 		goto out;
 
 	/* packets are considered pending if in the TX queue or the FW */
@@ -5704,7 +5703,7 @@ static ssize_t wl1271_sysfs_store_bt_coex_state(struct device *dev,
 
 	wl->sg_enabled = res;
 
-	if (wl->state == WL1271_STATE_OFF)
+	if (unlikely(wl->state != WLCORE_STATE_ON))
 		goto out;
 
 	ret = wl1271_ps_elp_wakeup(wl);
@@ -6211,7 +6210,7 @@ static struct ieee80211_hw *wl1271_alloc_hw(void)
 	wake_lock_init(&wl->recovery_wake, WAKE_LOCK_SUSPEND, "recovery_wake");
 #endif
 
-	wl->state = WL1271_STATE_OFF;
+	wl->state = WLCORE_STATE_OFF;
 	wl->fw_type = WL12XX_FW_TYPE_NONE;
 	wl->saved_fw_type = WL12XX_FW_TYPE_NONE;
 	mutex_init(&wl->mutex);

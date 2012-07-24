@@ -101,9 +101,10 @@
 
 #define NUM_MAC_ADDRESSES          3
 
-enum wl1271_state {
-	WL1271_STATE_OFF,
-	WL1271_STATE_ON,
+enum wlcore_state {
+	WLCORE_STATE_OFF,
+	WLCORE_STATE_RESTARTING,
+	WLCORE_STATE_ON,
 };
 
 enum wl12xx_fw_type {
@@ -357,7 +358,7 @@ struct wl1271 {
 
 	spinlock_t wl_lock;
 
-	enum wl1271_state state;
+	enum wlcore_state state;
 	enum wl12xx_fw_type fw_type;
 	enum wl12xx_fw_type saved_fw_type;
 	bool plt;

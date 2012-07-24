@@ -110,11 +110,14 @@ static void wl1271_debugfs_update_stats(struct wl1271 *wl)
 
 	mutex_lock(&wl->mutex);
 
+	if (unlikely(wl->state != WLCORE_STATE_ON))
+		goto out;
+
 	ret = wl1271_ps_elp_wakeup(wl);
 	if (ret < 0)
 		goto out;
 
-	if (wl->state == WL1271_STATE_ON && !wl->plt &&
+	if (!wl->plt &&
 	    time_after(jiffies, wl->stats.fw_stats_update +
 		       msecs_to_jiffies(WL1271_DEBUGFS_STATS_LIFETIME))) {
 		wl1271_acx_statistics(wl, wl->stats.fw_stats);
@@ -347,7 +350,7 @@ static ssize_t dynamic_ps_timeout_write(struct file *file,
 
 	wl->conf.conn.dynamic_ps_timeout = value;
 
-	if (wl->state == WL1271_STATE_OFF)
+	if (unlikely(wl->state != WLCORE_STATE_ON))
 		goto out;
 
 	ret = wl1271_ps_elp_wakeup(wl);
@@ -412,7 +415,7 @@ static ssize_t forced_ps_write(struct file *file,
 
 	wl->conf.conn.forced_ps = value;
 
-	if (wl->state == WL1271_STATE_OFF)
+	if (unlikely(wl->state != WLCORE_STATE_ON))
 		goto out;
 
 	ret = wl1271_ps_elp_wakeup(wl);
