@@ -2776,7 +2776,6 @@ static int wl1271_op_add_interface(struct ieee80211_hw *hw,
 	struct wl12xx_vif *wlvif = wl12xx_vif_to_data(vif);
 	int ret = 0;
 	u8 role_type;
-	int open_count;
 	bool booted = false;
 
 	wl1271_debug(DEBUG_MAC80211, "mac80211 add interface type %d mac %pM",
@@ -2861,10 +2860,10 @@ static int wl1271_op_add_interface(struct ieee80211_hw *hw,
 	else
 		wl->sta_count++;
 
-	open_count = ieee80211_get_open_count(hw, vif);
-	if (open_count > 0)  /* Multi Role */
+	/* we can't roam with the MR FW */
+	if (wl->fw_type == WL12XX_FW_TYPE_MULTI)
 		ieee80211_roaming_status(vif, false);
-	else                 /* Single Role */
+	else
 		ieee80211_roaming_status(vif, true);
 
 out:
