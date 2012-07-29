@@ -2745,16 +2745,19 @@ void wl12xx_delayed_recovery_work(struct work_struct *work)
 	struct delayed_work *dwork;
 	struct wl1271 *wl;
 	enum fw_change_type change_type;
+	int ret;
 
 	dwork = container_of(work, struct delayed_work, work);
 	wl = container_of(dwork, struct wl1271, delayed_recovery);
 
 	wl1271_debug(DEBUG_CMD, "delayed recovery");
 
+	mutex_lock(&wl->mutex);
+
 	/* check recovery is still needed. */
 	change_type = wl12xx_need_fw_change(wl);
 	if (change_type == FW_CHANGE_NONE)
-		return;
+		goto out;
 
 	/*
 	 * the recovery itself might cancel need to MR fw
@@ -2764,9 +2767,18 @@ void wl12xx_delayed_recovery_work(struct work_struct *work)
 	if (change_type == FW_CHANGE_SR_TO_MR)
 		wl->force_mr_fw = true;
 
+	ret = wl1271_ps_elp_wakeup(wl);
+	if (ret < 0)
+		goto out;
+
 	wl12xx_force_active_psm(wl);
+
+	wl1271_ps_elp_sleep(wl);
+
 	set_bit(WL1271_FLAG_INTENDED_FW_RECOVERY, &wl->flags);
 	wl12xx_queue_recovery_work(wl);
+out:
+	mutex_unlock(&wl->mutex);
 }
 
 static int wl1271_op_add_interface(struct ieee80211_hw *hw,
