@@ -935,6 +935,8 @@ struct ieee80211_local {
 	struct ieee80211_channel *oper_channel, *csa_channel;
 	struct ieee80211_channel *ap_cs_channel;
 	enum nl80211_channel_type ap_cs_type;
+	/* Channel switch request completion */
+	struct completion *csr_compl;
 
 	/* Temporary remain-on-channel for off-channel operations */
 	struct ieee80211_channel *tmp_channel;

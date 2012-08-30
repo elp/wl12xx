@@ -2973,6 +2973,11 @@ void ieee80211_ap_ch_switch_done_work(struct work_struct *work)
 
 	cfg80211_ch_switch_notify(sdata->dev, local->oper_channel->center_freq,
 				  local->_oper_channel_type);
+
+	if (local->csr_compl) {
+		complete(local->csr_compl);
+		local->csr_compl = NULL;
+	}
 }
 
 void ieee80211_ap_ch_switch_done(struct ieee80211_vif *vif,
