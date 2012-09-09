@@ -1399,14 +1399,9 @@ static void wl12xx_read_fwlog_panic(struct wl1271 *wl)
 	if (!block)
 		return;
 
-	/* Make sure the chip is awake and the logger isn't active. */
-	if (!wl1271_ps_elp_wakeup(wl)) {
-		/* Do not send a stop fwlog command if the fw is hanged */
-		if (!wl->watchdog_recovery)
-			wl12xx_cmd_stop_fwlog(wl);
-	}
-	else
-		goto out;
+	/* Do not send a stop fwlog command if the fw is hanged */
+	if (!wl->watchdog_recovery)
+		wl12xx_cmd_stop_fwlog(wl);
 
 	/* Read the first memory block address */
 	ret = wl12xx_fw_status(wl, wl->fw_status);
