@@ -1342,7 +1342,8 @@ out:
 
 void wl12xx_queue_recovery_work(struct wl1271 *wl)
 {
-	WARN_ON(!test_bit(WL1271_FLAG_INTENDED_FW_RECOVERY, &wl->flags));
+	WARN_ON(!test_bit(WL1271_FLAG_INTENDED_FW_RECOVERY, &wl->flags) &&
+		!wl->watchdog_recovery);
 
 	/* Avoid a recursive recovery */
 	if (wl->state == WLCORE_STATE_ON) {
