@@ -54,6 +54,7 @@
 #define WL1271_BOOT_RETRIES 3
 
 #define WL12XX_CORE_DUMP_CHUNK_SIZE	(4 * PAGE_SIZE)
+#define WL12XX_CORE_DUMP_ENABLED	(false)
 
 static struct conf_drv_settings default_conf = {
 	.sg = {
@@ -365,7 +366,7 @@ static struct conf_drv_settings default_conf = {
 		.threshold                    = 0,
 	},
 	.core_dump = {
-		.enable                       = false,
+		.enable                       = WL12XX_CORE_DUMP_ENABLED,
 
 		/* wl127x chip memory partitions */
 		.mem_wl127x		      = {
@@ -445,6 +446,7 @@ static struct conf_drv_settings default_conf = {
 };
 
 static char *fwlog_param;
+static bool core_dump_enabled = WL12XX_CORE_DUMP_ENABLED;
 static bool bug_on_recovery;
 static char *fref_param;
 static char *tcxo_param;
@@ -833,6 +835,9 @@ static void wl1271_conf_init(struct wl1271 *wl)
 			wl1271_error("Unknown fwlog parameter %s", fwlog_param);
 		}
 	}
+
+	/* Adjust core_dump enable according to optional module param */
+	wl->conf.core_dump.enable = core_dump_enabled;
 
 	wl->ref_clock = -1;
 	if (fref_param) {
@@ -6821,6 +6826,9 @@ MODULE_PARM_DESC(debug_level, "wl12xx debugging level");
 module_param_named(fwlog, fwlog_param, charp, 0);
 MODULE_PARM_DESC(keymap,
 		 "FW logger options: continuous, ondemand, dbgpins or disable");
+
+module_param_named(core_dump, core_dump_enabled, bool, S_IRUSR | S_IWUSR);
+MODULE_PARM_DESC(core_dump, "Core Dump: 0-disable, 1-enable");
 
 module_param(bug_on_recovery, bool, S_IRUSR | S_IWUSR);
 MODULE_PARM_DESC(bug_on_recovery, "BUG() on fw recovery");
