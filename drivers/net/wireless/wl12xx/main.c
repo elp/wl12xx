@@ -53,6 +53,8 @@
 
 #define WL1271_BOOT_RETRIES 3
 
+#define WL12XX_CORE_DUMP_CHUNK_SIZE	(4 * PAGE_SIZE)
+
 static struct conf_drv_settings default_conf = {
 	.sg = {
 		.params = {
@@ -361,6 +363,49 @@ static struct conf_drv_settings default_conf = {
 		.timestamp                    = WL12XX_FWLOG_TIMESTAMP_DISABLED,
 		.output                       = WL12XX_FWLOG_OUTPUT_DBG_PINS,
 		.threshold                    = 0,
+	},
+	.core_dump = {
+		.enable                       = false,
+
+		/* wl127x chip memory partitions */
+		.mem_wl127x		      = {
+			[CONF_MEM_CODE]	= {
+				.start = 0x0,
+				.size  = 0x30000
+			},
+			[CONF_MEM_DATA]	= {
+				.start = 0x20000000,
+				.size  = 0xC000
+			},
+			[CONF_MEM_PACKET] = {
+				.start = 0x40000,
+				.size  = 0xD000
+			},
+			[CONF_MEM_REGISTERS] = {
+				.start = 0x300000,
+				.size  = 0x10000
+			},
+		},
+
+		/* wl128x chip memory partitions */
+		.mem_wl128x		      = {
+			[CONF_MEM_CODE]	= {
+				.start = 0x0,
+				.size  = 0x30000
+			},
+			[CONF_MEM_DATA]	= {
+				.start = 0x20000000,
+				.size  = 0xC000
+			},
+			[CONF_MEM_PACKET] = {
+				.start = 0x40000,
+				.size  = 0x9000
+			},
+			[CONF_MEM_REGISTERS] = {
+				.start = 0x300000,
+				.size  = 0x10000
+			},
+		},
 	},
 	.hci_io_ds = HCI_IO_DS_6MA,
 	.rate = {
@@ -1438,6 +1483,103 @@ out:
 	kfree(block);
 }
 
+static void wl12xx_read_core_dump_panic(struct wl1271 *wl)
+{
+	struct wl1271_partition_set part, old_part;
+	int i;
+	int len = 0;
+	int ret;
+	int order;
+	void *chunk;
+
+	if (!wl->conf.core_dump.enable)
+		goto skip_read;
+
+	if (!wl->core_dump) {
+		wl1271_error("%s: wl->core_dump NULL", __func__);
+
+		goto skip_read;
+	}
+
+	if (!wl->core_dump_mem_area) {
+		wl1271_error("%s: wl->core_dump_mem_area NULL", __func__);
+
+		goto skip_read;
+	}
+
+	/* Chunk to use for SDIO DMA */
+	order = get_order(WL12XX_CORE_DUMP_CHUNK_SIZE);
+	chunk = (void *) __get_free_pages(GFP_KERNEL, order);
+
+	if (!chunk) {
+		wl1271_error("%s: failed to alloc chunk pages", __func__);
+
+		goto skip_read;
+	}
+
+	/* store current partition and switch partition */
+	old_part = wl->part;
+	memset(&part, 0, sizeof(part));
+	for (i = 0; i < CONF_MEM_LAST; i++) {
+		u32 mem_area_end =
+			wl->core_dump_mem_area[i].start +
+			wl->core_dump_mem_area[i].size;
+
+		part.mem.start = wl->core_dump_mem_area[i].start;
+		part.mem.size  = WL12XX_CORE_DUMP_CHUNK_SIZE;
+
+		while (part.mem.start < mem_area_end) {
+
+			part.mem.size =	min(
+				part.mem.size,
+				mem_area_end - part.mem.start);
+
+			ret = wl1271_set_partition(wl, &part);
+			if (ret < 0) {
+				wl1271_error("%s: %s start=0x%X size=%d",
+					__func__,
+					"failed to set partition",
+					part.mem.start, part.mem.size);
+
+				goto recover;
+			}
+
+			ret = wl1271_raw_read(
+				wl, 0,  chunk,
+				part.mem.size, false);
+
+			if (ret < 0) {
+				wl1271_error(
+					"%s: %s buff=0x%X start=0x%X size=%d",
+					__func__,
+					"failed to set partition",
+					(int) chunk,
+					part.mem.start, part.mem.size);
+
+				goto recover;
+			}
+
+			memcpy(wl->core_dump + len,
+			       chunk, part.mem.size);
+
+			part.mem.start +=  part.mem.size;
+			len += part.mem.size;
+		}
+	}
+
+	wl->core_dump_avail = true;
+	wake_up_interruptible(&wl->core_dump_waitq);
+
+recover:
+	free_pages((unsigned long) chunk, order);
+
+	/* recover partition */
+	wl1271_set_partition(wl, &old_part);
+
+skip_read:
+	return;
+}
+
 static void wl12xx_print_recovery(struct wl1271 *wl)
 {
 	u32 pc = 0;
@@ -1466,6 +1608,7 @@ static void wl1271_recovery_work(struct work_struct *work)
 		goto out_unlock;
 
 	if (!test_bit(WL1271_FLAG_INTENDED_FW_RECOVERY, &wl->flags)) {
+		wl12xx_read_core_dump_panic(wl);
 		wl12xx_read_fwlog_panic(wl);
 		wl12xx_print_recovery(wl);
 	}
@@ -5806,6 +5949,80 @@ static struct bin_attribute fwlog_attr = {
 	.read = wl1271_sysfs_read_fwlog,
 };
 
+static ssize_t wl1271_sysfs_read_core_dump(struct file *filp,
+					   struct kobject *kobj,
+					   struct bin_attribute *bin_attr,
+					   char *buffer, loff_t pos,
+					   size_t count)
+{
+	struct device *dev = container_of(kobj, struct device, kobj);
+	struct wl1271 *wl = dev_get_drvdata(dev);
+	ssize_t len = 0;
+	int ret;
+
+	ret = mutex_lock_interruptible(&wl->mutex);
+	if (ret < 0) {
+		len = -ERESTARTSYS;
+		goto out;
+	}
+
+	if (!wl->core_dump_avail && pos != 0) {
+		/* Trying to read more but device removed - return EOF */
+		goto out_mutex;
+	}
+
+	/* Let only one thread read the log at a time, blocking others */
+	while (!wl->core_dump_avail) {
+		DEFINE_WAIT(wait);
+
+		prepare_to_wait_exclusive(&wl->core_dump_waitq,
+					  &wait,
+					  TASK_INTERRUPTIBLE);
+
+		if (wl->core_dump_avail || wl->core_dump_size == 0) {
+			finish_wait(&wl->core_dump_waitq, &wait);
+			break;
+		}
+
+		mutex_unlock(&wl->mutex);
+
+		schedule();
+		finish_wait(&wl->core_dump_waitq, &wait);
+
+		if (signal_pending(current)) {
+			len = -ERESTARTSYS;
+			goto out;
+		}
+
+		ret = mutex_lock_interruptible(&wl->mutex);
+		if (ret < 0) {
+			len = -ERESTARTSYS;
+			goto out;
+		}
+	}
+
+	len = min((int) count, (int) wl->core_dump_size - (int) pos);
+
+	if (len > 0)
+		memcpy(buffer, wl->core_dump + pos, len);
+	else {
+		/* When reader reaches EOF, block readers till new core_dump */
+		wl->core_dump_avail = false;
+		len = 0;
+	}
+
+out_mutex:
+	mutex_unlock(&wl->mutex);
+
+out:
+	return len;
+}
+
+static struct bin_attribute core_dump_attr = {
+	.attr = {.name = "core_dump", .mode = S_IRUSR},
+	.read = wl1271_sysfs_read_core_dump,
+};
+
 static bool wl12xx_mac_in_fuse(struct wl1271 *wl)
 {
 	bool supported = false;
@@ -6132,6 +6349,69 @@ static int wl1271_init_ieee80211(struct wl1271 *wl)
 
 #define WL1271_DEFAULT_CHANNEL 0
 
+static void wl12xx_core_dump_init(struct wl1271 *wl)
+{
+	wl->core_dump = NULL;
+	wl->core_dump_size = 0;
+	wl->core_dump_avail = false;
+	wl->core_dump_mem_area = NULL;
+	init_waitqueue_head(&wl->core_dump_waitq);
+}
+
+static int wl12xx_core_dump_create(struct wl1271 *wl)
+{
+	int ret = 0;
+	int i;
+	int len = 0;
+
+	if (!wl->conf.core_dump.enable)
+		goto out;
+
+	/* Alloc core dump area according to chip type and sysfs file */
+	if (wl->chip.id == CHIP_ID_1283_PG20 ||
+	    wl->chip.id == CHIP_ID_1283_PG10)
+		/* Change PACKET memory area for wl128x */
+		wl->core_dump_mem_area = wl->conf.core_dump.mem_wl128x;
+	else
+		wl->core_dump_mem_area = wl->conf.core_dump.mem_wl127x;
+
+	for (i = 0; i < CONF_MEM_LAST; i++)
+		len += wl->core_dump_mem_area[i].size;
+
+	/* Create sysfs file for the core_dump log */
+	core_dump_attr.size = len;
+	ret = device_create_bin_file(wl->dev, &core_dump_attr);
+	if (ret < 0) {
+		wl1271_error("failed to create sysfs file core_dump");
+		wl->core_dump_mem_area = NULL;
+		goto out;
+	}
+
+	/* Allocate memory for Core Dump */
+	wl->core_dump = vmalloc(len);
+	if (!wl->core_dump) {
+		ret = -ENOMEM;
+		wl1271_error("failed to allocate core_dump memory area");
+		device_remove_bin_file(wl->dev, &core_dump_attr);
+		wl->core_dump_mem_area = NULL;
+		goto out;
+	}
+
+	wl->core_dump_size = len;
+
+out:
+	return ret;
+}
+
+static void wl12xx_core_dump_free(struct wl1271 *wl)
+{
+	if (wl->conf.core_dump.enable) {
+		device_remove_bin_file(wl->dev, &core_dump_attr);
+		vfree(wl->core_dump);
+		wl12xx_core_dump_init(wl);
+	}
+}
+
 static struct ieee80211_hw *wl1271_alloc_hw(void)
 {
 	struct ieee80211_hw *hw;
@@ -6217,6 +6497,9 @@ static struct ieee80211_hw *wl1271_alloc_hw(void)
 	/* Apply default driver configuration. */
 	wl1271_conf_init(wl);
 
+	/* Initialize core_dump */
+	wl12xx_core_dump_init(wl);
+
 	order = get_order(WL1271_AGGR_BUFFER_SIZE);
 	wl->aggr_buf = (u8 *)__get_free_pages(GFP_KERNEL, order);
 	if (!wl->aggr_buf) {
@@ -6292,11 +6575,20 @@ static int wl1271_free_hw(struct wl1271 *wl)
 	wake_lock_destroy(&wl->rx_wake);
 	wake_lock_destroy(&wl->recovery_wake);
 #endif
-	/* Unblock any fwlog readers */
+	/* Unblock any fwlog and core_dump readers */
 	mutex_lock(&wl->mutex);
+
+	if (wl->conf.core_dump.enable) {
+		wl->core_dump_size = 0;
+		wake_up_interruptible_all(&wl->core_dump_waitq);
+	}
+
 	wl->fwlog_size = -1;
 	wake_up_interruptible_all(&wl->fwlog_waitq);
+
 	mutex_unlock(&wl->mutex);
+
+	wl12xx_core_dump_free(wl);
 
 	device_remove_bin_file(wl->dev, &fwlog_attr);
 
@@ -6428,11 +6720,16 @@ static int __devinit wl12xx_probe(struct platform_device *pdev)
 	if (ret)
 		goto out_irq;
 
+	/* Allocate core_dump memory and creates sysfs file */
+	ret = wl12xx_core_dump_create(wl);
+	if (ret)
+		goto out_irq;
+
 	/* Create sysfs file to control bt coex state */
 	ret = device_create_file(wl->dev, &dev_attr_bt_coex_state);
 	if (ret < 0) {
 		wl1271_error("failed to create sysfs file bt_coex_state");
-		goto out_irq;
+		goto out_core_dump;
 	}
 
 	/* Create sysfs file to get HW PG version */
@@ -6456,6 +6753,9 @@ out_hw_pg_ver:
 
 out_bt_coex_state:
 	device_remove_file(wl->dev, &dev_attr_bt_coex_state);
+
+out_core_dump:
+	wl12xx_core_dump_free(wl);
 
 out_irq:
 	free_irq(wl->irq, wl);

@@ -1291,6 +1291,29 @@ struct conf_fwlog {
 	u8 threshold;
 };
 
+enum core_dump_mem_area_enum {
+	CONF_MEM_CODE      = 0,
+	CONF_MEM_DATA      = 1,
+	CONF_MEM_PACKET	   = 2,
+	CONF_MEM_REGISTERS = 3,
+
+	CONF_MEM_LAST,
+};
+
+struct mem_partition {
+	u32 size;
+	u32 start;
+};
+
+struct conf_core_dump {
+	/* enable core dump to sysfs */
+	u8 enable;
+
+	/* FW memory areas to dump */
+	struct mem_partition mem_wl127x[CONF_MEM_LAST];
+	struct mem_partition mem_wl128x[CONF_MEM_LAST];
+};
+
 #define ACX_RATE_MGMT_NUM_OF_RATES 13
 struct conf_rate_policy_settings {
 	u16 rate_retry_score;
@@ -1341,6 +1364,7 @@ struct conf_drv_settings {
 	struct conf_fm_coex fm_coex;
 	struct conf_rx_streaming_settings rx_streaming;
 	struct conf_fwlog fwlog;
+	struct conf_core_dump core_dump;
 	struct conf_rate_policy_settings rate;
 	struct conf_hangover_settings hangover;
 	u8 hci_io_ds;

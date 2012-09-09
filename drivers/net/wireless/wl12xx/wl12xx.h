@@ -453,6 +453,21 @@ struct wl1271 {
 	/* Sysfs FW log entry readers wait queue */
 	wait_queue_head_t fwlog_waitq;
 
+	/* Core Dump memory map */
+	struct mem_partition *core_dump_mem_area;
+
+	/* Core Dump buffer */
+	u8 *core_dump;
+
+	/* Number of valid bytes in the core dump buffer */
+	size_t core_dump_size;
+
+	/* Core dump available */
+	bool core_dump_avail;
+
+	/* Sysfs core_dump entry readers wait queue */
+	wait_queue_head_t core_dump_waitq;
+
 	/* Hardware recovery work */
 	struct work_struct recovery_work;
 	/*
