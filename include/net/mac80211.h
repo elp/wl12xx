@@ -1153,6 +1153,11 @@ enum sta_notify_cmd {
  *
  * @IEEE80211_HW_SUPPORTS_IM_SCAN_EVENT: Hardware supports intemediate scan
  *	event.
+ *
+ * @IEEE80211_HW_AP_CH_IS_DOMINANT: AP/GO channel is dominant, thus other roles
+ *	which has a different operational channel will be blocked.
+ *	By default the STA channel is the dominant one (this flag is't set) and
+ *	the AP/GO channel can follow the dominant role channel.
  */
 enum ieee80211_hw_flags {
 	IEEE80211_HW_HAS_RATE_CONTROL			= 1<<0,
@@ -1183,6 +1188,7 @@ enum ieee80211_hw_flags {
 	IEEE80211_HW_SUPPORTS_IM_SCAN_EVENT		= 1<<25,
 	IEEE80211_HW_SCAN_WHILE_IDLE			= 1<<26,
 	IEEE80211_HW_SUPPORTS_RX_FILTERS                = 1<<27,
+	IEEE80211_HW_AP_CH_IS_DOMINANT			= 1<<28,
 };
 
 /**

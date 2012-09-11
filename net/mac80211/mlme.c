@@ -2475,6 +2475,8 @@ int ieee80211_mgd_auth(struct ieee80211_sub_if_data *sdata,
 	const u8 *ssid;
 	struct ieee80211_work *wk;
 	u16 auth_alg;
+	struct ieee80211_local *local = sdata->local;
+	struct ieee80211_sub_if_data *ap_sdata = NULL, *tmp_sdata = NULL;
 
 	if (req->local_state_change)
 		return 0; /* no need to update mac80211 state */
@@ -2498,6 +2500,25 @@ int ieee80211_mgd_auth(struct ieee80211_sub_if_data *sdata,
 		auth_alg = WLAN_AUTH_LEAP;
 		break;
 	default:
+		return -EOPNOTSUPP;
+	}
+
+	list_for_each_entry(tmp_sdata, &local->interfaces, list) {
+		if ((tmp_sdata->vif.type == NL80211_IFTYPE_AP) &&
+		    ieee80211_sdata_running(tmp_sdata) &&
+		    (tmp_sdata->vif.bss_conf.enable_beacon)) {
+			ap_sdata = tmp_sdata;
+			break;
+		}
+	}
+
+	if (ap_sdata &&
+	    (local->hw.flags & IEEE80211_HW_AP_CH_IS_DOMINANT) &&
+	    (local->oper_channel != req->bss->channel)) {
+		wiphy_debug(local->hw.wiphy,
+			    "%s: Can't authenticate with %pM on ch %d.\n",
+			    sdata->name, req->bss->bssid,
+			    req->bss->channel->hw_value);
 		return -EOPNOTSUPP;
 	}
 
