@@ -452,6 +452,7 @@ static bool core_dump_enabled = WL12XX_CORE_DUMP_ENABLED;
 static bool bug_on_recovery;
 static char *fref_param;
 static char *tcxo_param;
+static bool ap_ch_is_dominant;
 
 static void __wl1271_op_remove_interface(struct wl1271 *wl,
 					 struct ieee80211_vif *vif,
@@ -6435,6 +6436,9 @@ static int wl1271_init_ieee80211(struct wl1271 *wl)
 		IEEE80211_HW_SCAN_WHILE_IDLE |
 		IEEE80211_HW_SUPPORTS_RX_FILTERS;
 
+	if (ap_ch_is_dominant)
+		wl->hw->flags |= IEEE80211_HW_AP_CH_IS_DOMINANT;
+
 	wl->hw->wiphy->cipher_suites = cipher_suites;
 	wl->hw->wiphy->n_cipher_suites = ARRAY_SIZE(cipher_suites);
 
@@ -6998,6 +7002,9 @@ MODULE_PARM_DESC(fref, "FREF clock: 19.2, 26, 26x, 38.4, 38.4x, 52");
 module_param_named(tcxo, tcxo_param, charp, 0);
 MODULE_PARM_DESC(tcxo,
 		 "TCXO clock: 19.2, 26, 38.4, 52, 16.368, 32.736, 16.8, 33.6");
+
+module_param(ap_ch_is_dominant, bool, S_IRUSR | S_IWUSR);
+MODULE_PARM_DESC(ap_ch_is_dominant, "Sets the AP/GO channel as dominant");
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Luciano Coelho <coelho@ti.com>");
