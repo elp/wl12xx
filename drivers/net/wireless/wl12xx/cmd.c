@@ -2033,3 +2033,37 @@ int wl12xx_stop_dev(struct wl1271 *wl, struct wl12xx_vif *wlvif)
 out:
 	return ret;
 }
+
+
+/* generic firmware configuration - used as a feature dumpster */
+int wl12xx_cmd_generic_cfg(struct wl1271 *wl, struct wl12xx_vif *wlvif,
+			   u8 index, bool enable, u8 value)
+{
+	struct wl12xx_cmd_generic_cfg *cmd;
+	int ret;
+
+	wl1271_debug(DEBUG_CMD, "cmd generic cfg (%d %d %d)",
+		     index, enable, value);
+
+	cmd = kzalloc(sizeof(*cmd), GFP_KERNEL);
+	if (!cmd) {
+		ret = -ENOMEM;
+		goto out;
+	}
+	cmd->role_id    = wlvif ? wlvif->role_id : WL12XX_INVALID_ROLE_ID;
+	cmd->index      = index;
+	cmd->status     = (u8) enable;
+	cmd->value      = value;
+
+	ret = wl1271_cmd_send(wl, CMD_GENERIC_CFG, cmd, sizeof(*cmd), 0);
+	if (ret < 0) {
+		wl1271_error("failed to send generic cfg command");
+		goto out_free;
+	}
+
+out_free:
+	kfree(cmd);
+
+out:
+	return ret;
+}

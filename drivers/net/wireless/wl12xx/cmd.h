@@ -93,6 +93,8 @@ int wl12xx_cmd_channel_switch(struct wl1271 *wl,
 			      struct wl12xx_vif *wlvif,
 			      struct ieee80211_channel_switch *ch_switch);
 int wl12xx_cmd_stop_channel_switch(struct wl1271 *wl);
+int wl12xx_cmd_generic_cfg(struct wl1271 *wl, struct wl12xx_vif *wlvif,
+			   u8 index, bool enable, u8 value);
 int wl12xx_allocate_link(struct wl1271 *wl, struct wl12xx_vif *wlvif,
 			 u8 *hlid);
 void wl12xx_free_link(struct wl1271 *wl, struct wl12xx_vif *wlvif, u8 *hlid);
@@ -154,7 +156,9 @@ enum wl1271_commands {
 	CMD_WFD_START_DISCOVERY	= 45,
 	CMD_WFD_STOP_DISCOVERY	= 46,
 	CMD_WFD_ATTRIBUTE_CONFIG	= 47,
-	CMD_NOP			= 48,
+
+	CMD_GENERIC_CFG	        = 48,
+	CMD_NOP			= 49,
 	CMD_LAST_COMMAND,
 
 	MAX_COMMAND_ID = 0xFFFF,
@@ -724,5 +728,20 @@ struct wl12xx_cmd_channel_switch {
 struct wl12xx_cmd_stop_channel_switch {
 	struct wl1271_cmd_header header;
 } __packed;
+
+enum wl12xx_generic_cfg {
+	WL12XX_GENCFG_DROP_BCAST        = 1,
+	WL12XX_GENCFG_TRANSMIT_POWER    = 2,
+	WL12XX_GENCFG_ARUBA_IOP_FIX     = 3,
+	WL12XX_GENCFG_DISABLE_SGI       = 4,
+};
+
+struct wl12xx_cmd_generic_cfg {
+	u8 role_id;
+	u8 index;
+	u8 status;
+	u8 value;
+} __packed;
+
 
 #endif /* __WL1271_CMD_H__ */

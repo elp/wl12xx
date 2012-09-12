@@ -5869,6 +5869,68 @@ static DEVICE_ATTR(bt_coex_state, S_IRUGO | S_IWUSR,
 		   wl1271_sysfs_show_bt_coex_state,
 		   wl1271_sysfs_store_bt_coex_state);
 
+static ssize_t wl1271_sysfs_read_disable_sgi(struct device *dev,
+					     struct device_attribute *attr,
+					     char *buf)
+{
+	struct wl1271 *wl = dev_get_drvdata(dev);
+	ssize_t len = PAGE_SIZE;
+
+	mutex_lock(&wl->mutex);
+	len = snprintf(buf, len, "%d\n", wl->disable_sgi);
+	mutex_unlock(&wl->mutex);
+
+	return len;
+}
+
+static ssize_t wl1271_sysfs_write_disable_sgi(struct device *dev,
+					      struct device_attribute *attr,
+					      const char *buf, size_t count)
+{
+	struct wl1271 *wl = dev_get_drvdata(dev);
+	unsigned long res;
+	int ret;
+
+	ret = kstrtoul(buf, 10, &res);
+	if (ret < 0) {
+		wl1271_warning("invalid value written to disable_sgi");
+		return count;
+	}
+
+	mutex_lock(&wl->mutex);
+
+	res = !!res;
+
+	if (res == wl->disable_sgi)
+		goto out;
+
+	if (unlikely(wl->state != WLCORE_STATE_ON)) {
+		wl1271_warning("chip is off");
+		goto out;
+	}
+
+	ret = wl1271_ps_elp_wakeup(wl);
+	if (ret < 0)
+		goto out;
+
+	ret = wl12xx_cmd_generic_cfg(wl, NULL,
+				     WL12XX_GENCFG_DISABLE_SGI, res, 0);
+	if (ret < 0)
+		goto out_sleep;
+
+	wl->disable_sgi = res;
+
+out_sleep:
+	wl1271_ps_elp_sleep(wl);
+out:
+	mutex_unlock(&wl->mutex);
+	return count;
+}
+
+static DEVICE_ATTR(disable_sgi, S_IRUGO | S_IWUSR,
+		   wl1271_sysfs_read_disable_sgi,
+		   wl1271_sysfs_write_disable_sgi);
+
 static ssize_t wl1271_sysfs_show_hw_pg_ver(struct device *dev,
 					   struct device_attribute *attr,
 					   char *buf)
@@ -6596,10 +6658,10 @@ static int wl1271_free_hw(struct wl1271 *wl)
 	wl12xx_core_dump_free(wl);
 
 	device_remove_bin_file(wl->dev, &fwlog_attr);
-
+	device_remove_file(wl->dev, &dev_attr_disable_sgi);
 	device_remove_file(wl->dev, &dev_attr_hw_pg_ver);
-
 	device_remove_file(wl->dev, &dev_attr_bt_coex_state);
+
 	kfree(wl->buffer_32);
 	kfree(wl->mbox);
 	kfree(wl->rx_mem_pool_addr);
@@ -6744,14 +6806,24 @@ static int __devinit wl12xx_probe(struct platform_device *pdev)
 		goto out_bt_coex_state;
 	}
 
+	/* Create sysfs file to control Short GI disabling */
+	ret = device_create_file(wl->dev, &dev_attr_disable_sgi);
+	if (ret < 0) {
+		wl1271_error("failed to create sysfs file disable_sgi");
+		goto out_hw_pg_ver;
+	}
+
 	/* Create sysfs file for the FW log */
 	ret = device_create_bin_file(wl->dev, &fwlog_attr);
 	if (ret < 0) {
 		wl1271_error("failed to create sysfs file fwlog");
-		goto out_hw_pg_ver;
+		goto out_disable_sgi;
 	}
 
 	return 0;
+
+out_disable_sgi:
+	device_remove_file(wl->dev, &dev_attr_disable_sgi);
 
 out_hw_pg_ver:
 	device_remove_file(wl->dev, &dev_attr_hw_pg_ver);

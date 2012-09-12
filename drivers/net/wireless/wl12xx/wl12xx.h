@@ -582,6 +582,9 @@ struct wl1271 {
 
 	/* mutex for protecting the tx_flush function */
 	struct mutex flush_mutex;
+
+	/* Short GI is disabled in the FW - For certification tests purposes */
+	bool disable_sgi;
 };
 
 struct wl1271_station {
