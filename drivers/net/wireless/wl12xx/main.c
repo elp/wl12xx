@@ -2290,10 +2290,11 @@ err:
 	return ret;
 }
 
-static int wl1271_configure_wowlan(struct wl1271 *wl,
-				   struct cfg80211_wowlan *wow)
+int wl1271_configure_wowlan(struct wl1271 *wl, struct cfg80211_wowlan *wow)
 {
 	int i, ret;
+
+	wl1271_debug(DEBUG_MAC80211, "configure_wowlan: wow %p", wow);
 
 	if (!wow || wow->any || !wow->n_patterns) {
 		ret = wl1271_rx_data_filtering_enable(wl, 0, FILTER_SIGNAL);
@@ -2662,6 +2663,7 @@ static void wl1271_op_stop_locked(struct wl1271 *wl)
 	memset(wl->links_map, 0, sizeof(wl->links_map));
 	memset(wl->roc_map, 0, sizeof(wl->roc_map));
 	wl->active_sta_count = 0;
+	wl->wowlan_patterns = NULL;
 
 	/* The system link is always allocated */
 	__set_bit(WL12XX_SYSTEM_HLID, wl->links_map);
@@ -3146,31 +3148,36 @@ static void __wl1271_op_remove_interface(struct wl1271 *wl,
 	}
 
 	if (!test_bit(WL1271_FLAG_RECOVERY_IN_PROGRESS, &wl->flags)) {
-		/* disable active roles and clear RX filters */
+		/* disable active roles */
 		ret = wl1271_ps_elp_wakeup(wl);
 		if (ret < 0)
 			goto deinit;
 
 		if (wlvif->bss_type == BSS_TYPE_STA_BSS ||
 		    wlvif->bss_type == BSS_TYPE_IBSS) {
-			ret = wl1271_configure_wowlan(wl, NULL);
-			if (ret < 0)
-				goto deinit;
-
 			if (wl12xx_dev_role_started(wlvif))
 				wl12xx_stop_dev(wl, wlvif);
 		}
 
+		/* Restore RX filters if last AP and still at least one STA */
+		if (wl->ap_count == 1 && wl->sta_count &&
+		    wlvif->bss_type == BSS_TYPE_AP_BSS &&
+		    wl->wowlan_patterns) {
+			ret = wl1271_configure_wowlan(wl, wl->wowlan_patterns);
+			if (ret < 0)
+				goto sleep;
+		}
+
 		ret = wl12xx_cmd_role_disable(wl, &wlvif->role_id);
 		if (ret < 0)
-			goto deinit;
+			goto sleep;
 
 		if (vif->dummy_p2p) {
 			ret = wl12xx_cmd_role_disable(wl, &wlvif->dev_role_id);
 			if (ret < 0)
-				goto deinit;
+				goto sleep;
 		}
-
+sleep:
 		wl1271_ps_elp_sleep(wl);
 	}
 deinit:
@@ -5035,17 +5042,28 @@ static int wl12xx_op_set_rx_filters(struct ieee80211_hw *hw,
 
 	mutex_lock(&wl->mutex);
 
-	wl1271_debug(DEBUG_MAC80211, "mac80211 set rx filters");
+	wl1271_debug(DEBUG_MAC80211, "mac80211 set rx filters: wowlan %p",
+		     wowlan);
 
-	if (unlikely(wl->state != WLCORE_STATE_ON))
+	if (unlikely(wl->state != WLCORE_STATE_ON)) {
+		ret = -EOPNOTSUPP;
 		goto out;
+	}
 
 	ret = wl1271_ps_elp_wakeup(wl);
 	if (ret < 0)
 		goto out;
 
-	ret = wl1271_configure_wowlan(wl, wowlan);
+	/* No AP roles so configure FW with new filters */
+	if (!wl->ap_count) {
+		ret = wl1271_configure_wowlan(wl, wowlan);
+		if (ret < 0)
+			goto out_sleep;
+	}
 
+	wl->wowlan_patterns = wowlan;
+
+out_sleep:
 	wl1271_ps_elp_sleep(wl);
 out:
 	mutex_unlock(&wl->mutex);

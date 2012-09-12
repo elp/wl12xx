@@ -585,6 +585,9 @@ struct wl1271 {
 
 	/* Short GI is disabled in the FW - For certification tests purposes */
 	bool disable_sgi;
+
+	/* Patterns configured with set_rx_filters */
+	struct cfg80211_wowlan *wowlan_patterns;
 };
 
 struct wl1271_station {
