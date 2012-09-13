@@ -1907,12 +1907,20 @@ int ieee80211_set_rx_filters(struct wiphy *wiphy,
 			     struct cfg80211_wowlan *wowlan)
 {
 	struct ieee80211_local *local = wiphy_priv(wiphy);
+	int ret = 0;
 
 	if (!(local->hw.flags & IEEE80211_HW_SUPPORTS_RX_FILTERS))
 		return 0;
 
+	mutex_lock(&local->mtx);
+	ret = drv_set_rx_filters(local, wowlan);
+	if (ret < 0)
+		goto unlock;
+
 	local->wowlan_patterns = wowlan;
-	return drv_set_rx_filters(local, wowlan);
+unlock:
+	mutex_unlock(&local->mtx);
+	return ret;
 }
 
 static int ieee80211_set_cqm_rssi_config(struct wiphy *wiphy,

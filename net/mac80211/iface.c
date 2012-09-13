@@ -279,6 +279,7 @@ static int ieee80211_do_open(struct net_device *dev, bool coming_up)
 			res = drv_add_interface(local, sdata);
 			if (res)
 				goto err_stop;
+			drv_set_rx_filters(local, local->wowlan_patterns);
 		}
 
 		if (sdata->vif.type == NL80211_IFTYPE_AP) {
