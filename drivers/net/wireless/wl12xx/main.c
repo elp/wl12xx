@@ -5535,6 +5535,21 @@ static void wl12xx_op_channel_switch(struct ieee80211_hw *hw,
 		goto out;
 	}
 
+	/*
+	 * Channel switch command for STA/P2P-CL is not supported in MR FW.
+	 * Disconnect the STA to cause a reconnection on the second channel
+	 * which will also move the other role (AP).
+	 */
+	if (wl->fw_type == WL12XX_FW_TYPE_MULTI) {
+		wl1271_debug(DEBUG_MAC80211, "mac80211 dropping ch switch");
+		wl12xx_for_each_wlvif_sta(wl, wlvif) {
+			struct ieee80211_vif *vif = wl12xx_wlvif_to_vif(wlvif);
+			ieee80211_chswitch_done(vif, false);
+			ieee80211_connection_loss(vif);
+		}
+		goto out;
+	}
+
 	ret = wl1271_ps_elp_wakeup(wl);
 	if (ret < 0)
 		goto out;
