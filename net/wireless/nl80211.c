@@ -5907,6 +5907,7 @@ static int nl80211_set_wowlan(struct sk_buff *skb, struct genl_info *info)
 	struct nlattr *tb[NUM_NL80211_WOWLAN_TRIG];
 	struct cfg80211_wowlan no_triggers = {};
 	struct cfg80211_wowlan new_triggers = {};
+	struct cfg80211_wowlan *ntrig;
 	struct wiphy_wowlan_support *wowlan = &rdev->wiphy.wowlan;
 	int err, i;
 	int ret = 0;
@@ -6035,24 +6036,28 @@ static int nl80211_set_wowlan(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	if (memcmp(&new_triggers, &no_triggers, sizeof(new_triggers))) {
-		struct cfg80211_wowlan *ntrig;
 		ntrig = kmemdup(&new_triggers, sizeof(new_triggers),
 				GFP_KERNEL);
 		if (!ntrig) {
 			err = -ENOMEM;
 			goto error;
 		}
-		cfg80211_rdev_free_wowlan(rdev);
-		rdev->wowlan = ntrig;
 	} else {
  no_triggers:
-		cfg80211_rdev_free_wowlan(rdev);
-		rdev->wowlan = NULL;
+		ntrig = NULL;
 	}
 
-	if (rdev->ops->set_rx_filters)
-		ret = rdev->ops->set_rx_filters(&rdev->wiphy,
-						rdev->wowlan);
+	if (rdev->ops->set_rx_filters) {
+		ret = rdev->ops->set_rx_filters(&rdev->wiphy, ntrig);
+		if (ret < 0) {
+			err = ret;
+			goto error;
+		}
+	}
+
+	cfg80211_rdev_free_wowlan(rdev);
+	rdev->wowlan = ntrig;
+
 	return ret;
  error:
 	for (i = 0; i < new_triggers.n_patterns; i++)
