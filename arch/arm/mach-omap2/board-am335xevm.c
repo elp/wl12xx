@@ -935,18 +935,6 @@ static struct pinmux_config uart1_wl12xx_pin_mux[] = {
 };
 
 
-/*
-The following hardware mods were done on the EVM for working with WOWLAN
-WLAN_IRQ: moved from GPIO3_17 to GPIO0_19 (for waking up SA from suspend on WOWLAN event)
-WLAN_EN:  moved from GPIO1_16 to GPIO3_16 as GPIO1_16 is losing context during suspend
-*/
-static struct pinmux_config wl12xx_pin_mux[] = {
-	{"mcasp0_axr0.gpio3_16", OMAP_MUX_MODE7 | AM33XX_PIN_OUTPUT_PULLUP},
-	{"xdma_event_intr0.gpio0_19", OMAP_MUX_MODE7 | AM33XX_PIN_INPUT},
-	{"mcasp0_ahclkx.gpio3_21", OMAP_MUX_MODE7 | AM33XX_PIN_OUTPUT_PULLUP},
-	{NULL, 0},
- };
-
 static struct pinmux_config wl12xx_pin_mux_sk[] = {
 	{"gpmc_wpn.gpio0_31", OMAP_MUX_MODE7 | AM33XX_PIN_OUTPUT},
 	{"gpmc_csn0.gpio1_29", OMAP_MUX_MODE7 | AM33XX_PIN_INPUT},
@@ -1720,6 +1708,18 @@ static void wl12xx_init(int evm_id, int profile)
 				OMAP_GPIO_IRQ(AM335XEVM_SK_WLAN_IRQ_GPIO);
 		setup_pin_mux(wl12xx_pin_mux_sk);
 	} else {
+		/*
+		The following hardware mods were done on the EVM for working with WOWLAN
+		WLAN_IRQ: moved from GPIO3_17 to GPIO0_19 (for waking up SA from suspend on WOWLAN event)
+		WLAN_EN:  moved from GPIO1_16 to GPIO3_16 as GPIO1_16 is losing context during suspend
+		*/
+		struct pinmux_config wl12xx_pin_mux[] = {
+			{"mcasp0_axr0.gpio3_16", OMAP_MUX_MODE7 | AM33XX_PIN_OUTPUT_PULLUP},
+			{"xdma_event_intr0.gpio0_19", OMAP_MUX_MODE7 | AM33XX_PIN_INPUT},
+			{"mcasp0_ahclkx.gpio3_21", OMAP_MUX_MODE7 | AM33XX_PIN_OUTPUT_PULLUP},
+			{NULL, 0},
+		 };
+
 		setup_pin_mux(wl12xx_pin_mux);
 	}
 	wl12xx_bluetooth_enable();
