@@ -1861,7 +1861,7 @@ int wl12xx_acx_sta_get_rssi(struct wl1271 *wl, struct wl12xx_vif *wlvif,
 		goto out;
 	}
 
-	*rssi = stat_info->rssi_beacon;
+	*rssi = stat_info->rssi_data;
 
 out:
 	kfree(stat_info);
