@@ -169,6 +169,12 @@ static int wl1271_rx_handle_data(struct wl1271 *wl, u8 *data, u32 length,
 	if (ieee80211_is_data_present(hdr->frame_control))
 		is_data = 1;
 
+	if (!wl->beacon_arrived && wl->beacon_vif && beacon &&
+	    !compare_ether_addr(wl->beacon_vif->bss_conf.bssid, hdr->addr3)) {
+		wl->beacon_arrived = true;
+		wl->beacon_rssi = desc->rssi;
+	}
+
 	wl1271_rx_status(wl, desc, IEEE80211_SKB_RXCB(skb), beacon);
 
 	seq_num = (le16_to_cpu(hdr->seq_ctrl) & IEEE80211_SCTL_SEQ) >> 4;

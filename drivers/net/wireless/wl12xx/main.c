@@ -5143,8 +5143,8 @@ static void wl1271_op_get_current_rssi(struct ieee80211_hw *hw,
 {
 	struct wl1271 *wl = hw->priv;
 	struct wl12xx_vif *wlvif = wl12xx_vif_to_data(vif);
-	int rssi = 0;
 	int ret;
+	int tries = 0;
 
 	wl1271_debug(DEBUG_MAC80211, "mac80211 get current rssi");
 
@@ -5160,11 +5160,46 @@ static void wl1271_op_get_current_rssi(struct ieee80211_hw *hw,
 	if (ret < 0)
 		goto out;
 
-	ret = wl12xx_acx_sta_get_rssi(wl, wlvif, &rssi);
+	/* disable beacon filtering and wait for a beacon */
+	ret = wl1271_acx_beacon_filter_opt(wl,  wlvif, false);
 	if (ret < 0)
 		goto out_sleep;
 
-	sinfo->signal = (s8)rssi;
+	/* wl12xx_irq_locked takes elp as well - will never trigger an actual
+	 * sleep because of the timeout
+	 */
+	wl1271_ps_elp_sleep(wl);
+
+	wl->beacon_vif = vif; /* for identifying the bss */
+	wl->beacon_arrived = false;
+	do {
+		ret = wl12xx_irq_locked(wl);
+		if (ret) {
+			wl12xx_queue_recovery_work(wl);
+			goto out; /* no need to sleep */
+		}
+
+		msleep(50);
+		tries++;
+	} while (!wl->beacon_arrived && tries < 10);
+
+	if (tries == 10) {
+		wl1271_error("could not get beacon during get_rssi");
+	} else {
+		wl1271_debug(DEBUG_MAC80211,
+			     "beacon arrived inline with RSSI %d",
+			     wl->beacon_rssi);
+		sinfo->signal = wl->beacon_rssi;
+	}
+
+	/* return beacon filtering to normal */
+	ret = wl1271_ps_elp_wakeup(wl);
+	if (ret < 0)
+		goto out;
+
+	ret = wl1271_acx_beacon_filter_opt(wl,  wlvif, true);
+	if (ret < 0)
+		goto out_sleep;
 
 out_sleep:
 	wl1271_ps_elp_sleep(wl);

@@ -31,6 +31,7 @@
 #include <linux/list.h>
 #include <linux/bitops.h>
 #include <net/mac80211.h>
+#include <linux/etherdevice.h>
 #ifdef CONFIG_HAS_WAKELOCK
 #include <linux/wakelock.h>
 #endif
@@ -434,6 +435,11 @@ struct wl1271 {
 
 	/* FW Rx counter */
 	u32 rx_counter;
+
+	/* did beacon arrive while we were waiting? with which rssi? */
+	bool beacon_arrived;
+	s8 beacon_rssi;
+	struct ieee80211_vif *beacon_vif;
 
 	/* Rx memory pool address */
 	struct wl1271_rx_mem_pool_addr *rx_mem_pool_addr;
